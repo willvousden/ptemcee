@@ -1,0 +1,15 @@
+*~
+*.swp
+.DS_Store
+
+*.pyc
+*.so
+venv*
+build/*
+
+dist
+emcee.egg-info
+MANIFEST
+docs.tar
+
+*.pdf
