@@ -302,6 +302,12 @@ class Sampler:
         else:
             raise ValueError('Initial walker positions not specified.')
 
+        # Check for dodgy inputs.
+        if np.any(np.isinf(p)):
+            raise ValueError('At least one parameter value was infinite.')
+        if np.any(np.isnan(p)):
+            raise ValueError('At least one parameter value was NaN.')
+
         mapf = map if self.pool is None else self.pool.map
         betas = self._betas.reshape((-1, 1))
 
