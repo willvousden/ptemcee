@@ -233,16 +233,16 @@ class Sampler:
 
     def reset(self):
         """
-        Clear the ``time``, ``chain``, ``lnprobability``,
-        ``lnlikelihood``,  ``acceptance_fraction``,
+        Clear the ``time``, ``chain``, ``logprobability``,
+        ``loglikelihood``,  ``acceptance_fraction``,
         ``tswap_acceptance_fraction`` stored properties.
 
         """
 
         self._time = 0
         self._chain = None
-        self._lnprob = None
-        self._lnlikelihood = None
+        self._logprob = None
+        self._loglikelihood = None
         self._beta_history = None
 
         self.nswap = np.zeros(self.ntemps, dtype=np.float)
@@ -252,7 +252,7 @@ class Sampler:
         self.nprop_accepted = np.zeros((self.ntemps, self.nwalkers),
                                        dtype=np.float)
 
-    def sample(self, p0=None, lnprob0=None, lnlike0=None,
+    def sample(self, p0=None, logprob0=None, loglike0=None,
                iterations=1, thin=1, storechain=True,
                adapt=False):
         """
@@ -262,11 +262,11 @@ class Sampler:
             The initial positions of the walkers.  Shape should be
             ``(ntemps, nwalkers, dim)``.
 
-        :param lnprob0: (optional)
+        :param logprob0: (optional)
             The initial posterior values for the ensembles.  Shape
             ``(ntemps, nwalkers)``.
 
-        :param lnlike0: (optional)
+        :param loglike0: (optional)
             The initial likelihood values for the ensembles.  Shape
             ``(ntemps, nwalkers)``.
 
@@ -290,9 +290,9 @@ class Sampler:
 
         * ``p``, the current position of the walkers.
 
-        * ``lnprob`` the current posterior values for the walkers.
+        * ``logprob`` the current posterior values for the walkers.
 
-        * ``lnlike`` the current likelihood values for the walkers.
+        * ``loglike`` the current likelihood values for the walkers.
 
         """
 
@@ -311,8 +311,8 @@ class Sampler:
         mapf = map if self.pool is None else self.pool.map
         betas = self._betas.reshape((-1, 1))
 
-        # If we have no lnprob or logls compute them
-        if lnprob0 is None or lnlike0 is None:
+        # If we have no logprob or logls compute them
+        if logprob0 is None or loglike0 is None:
             results = list(mapf(self._likeprior, p.reshape((-1, self.dim))))
 
             logls = np.array([r[0] for r in results]).reshape((self.ntemps,
@@ -320,11 +320,11 @@ class Sampler:
             logps = np.array([r[1] for r in results]).reshape((self.ntemps,
                                                                self.nwalkers))
 
-            lnlike0 = logls
-            lnprob0 = logls * betas + logps
+            loglike0 = logls
+            logprob0 = logls * betas + logps
 
-        lnprob = lnprob0
-        logl = lnlike0
+        logprob = logprob0
+        logl = loglike0
 
         # Expand the chain in advance of the iterations
         if storechain:
@@ -354,10 +354,10 @@ class Sampler:
                     (self.ntemps, self.nwalkers//2))
                 qslogps = np.array([r[1] for r in results]).reshape(
                     (self.ntemps, self.nwalkers//2))
-                qslnprob = qslogls * betas + qslogps
+                qslogprob = qslogls * betas + qslogps
 
-                logpaccept = self.dim*np.log(zs) + qslnprob \
-                    - lnprob[:, jupdate::2]
+                logpaccept = self.dim*np.log(zs) + qslogprob \
+                    - logprob[:, jupdate::2]
                 logrs = np.log(np.random.uniform(low=0.0, high=1.0,
                                                  size=(self.ntemps,
                                                        self.nwalkers//2)))
@@ -367,8 +367,8 @@ class Sampler:
 
                 pupdate.reshape((-1, self.dim))[accepts, :] = \
                     qs.reshape((-1, self.dim))[accepts, :]
-                lnprob[:, jupdate::2].reshape((-1,))[accepts] = \
-                    qslnprob.reshape((-1,))[accepts]
+                logprob[:, jupdate::2].reshape((-1,))[accepts] = \
+                    qslogprob.reshape((-1,))[accepts]
                 logl[:, jupdate::2].reshape((-1,))[accepts] = \
                     qslogls.reshape((-1,))[accepts]
 
@@ -377,30 +377,30 @@ class Sampler:
                 self.nprop[:, jupdate::2] += 1.0
                 self.nprop_accepted[:, jupdate::2] += accepts
 
-            p, lnprob, logl, ratios = self._temperature_swaps(self._betas, p, lnprob, logl)
+            p, logprob, logl, ratios = self._temperature_swaps(self._betas, p, logprob, logl)
 
             # TODO Should the notion of a "complete" iteration really include the temperature
             # adjustment?
             if adapt and self.ntemps > 1:
                 dbetas = self._get_ladder_adjustment(self._time, self._betas, ratios).reshape((-1, 1))
                 betas += dbetas
-                lnprob += dbetas * logl
+                logprob += dbetas * logl
 
             if (i + 1) % thin == 0:
                 if storechain:
                     self._chain[:, :, isave, :] = p
-                    self._lnprob[:, :, isave] = lnprob
-                    self._lnlikelihood[:, :, isave] = logl
+                    self._logprob[:, :, isave] = logprob
+                    self._loglikelihood[:, :, isave] = logl
                     self._beta_history[:, isave] = self._betas
                     isave += 1
 
             self._time += 1
-            yield p, lnprob, logl
+            yield p, logprob, logl
 
-    def _temperature_swaps(self, betas, p, lnprob, logl):
+    def _temperature_swaps(self, betas, p, logprob, logl):
         """
         Perform parallel-tempering temperature swaps on the state
-        in ``p`` with associated ``lnprob`` and ``logl``.
+        in ``p`` with associated ``logprob`` and ``logl``.
 
         """
         ntemps = len(betas)
@@ -430,18 +430,18 @@ class Sampler:
 
             ptemp = np.copy(p[i, iperm[asel], :])
             ltemp = np.copy(logl[i, iperm[asel]])
-            prtemp = np.copy(lnprob[i, iperm[asel]])
+            prtemp = np.copy(logprob[i, iperm[asel]])
 
             p[i, iperm[asel], :] = p[i - 1, i1perm[asel], :]
             logl[i, iperm[asel]] = logl[i - 1, i1perm[asel]]
-            lnprob[i, iperm[asel]] = lnprob[i - 1, i1perm[asel]] \
+            logprob[i, iperm[asel]] = logprob[i - 1, i1perm[asel]] \
                 - dbeta * logl[i - 1, i1perm[asel]]
 
             p[i - 1, i1perm[asel], :] = ptemp
             logl[i - 1, i1perm[asel]] = ltemp
-            lnprob[i - 1, i1perm[asel]] = prtemp + dbeta * ltemp
+            logprob[i - 1, i1perm[asel]] = prtemp + dbeta * ltemp
 
-        return p, lnprob, logl, ratios
+        return p, logprob, logl, ratios
 
     def _get_ladder_adjustment(self, time, betas0, ratios):
         """
@@ -478,8 +478,8 @@ class Sampler:
 
     def _expand_chain(self, nsave):
         """
-        Expand ``self._chain``, ``self._lnprob``,
-        ``self._lnlikelihood``, and ``self._beta_history``
+        Expand ``self._chain``, ``self._logprob``,
+        ``self._loglikelihood``, and ``self._beta_history``
         ahead of run to make room for new samples.
 
         :param nsave:
@@ -494,9 +494,9 @@ class Sampler:
             isave = 0
             self._chain = np.zeros((self.ntemps, self.nwalkers, nsave,
                                     self.dim))
-            self._lnprob = np.zeros((self.ntemps, self.nwalkers, nsave))
-            self._lnlikelihood = np.zeros((self.ntemps, self.nwalkers,
-                                           nsave))
+            self._logprob = np.zeros((self.ntemps, self.nwalkers, nsave))
+            self._loglikelihood = np.zeros((self.ntemps, self.nwalkers,
+                                            nsave))
             self._beta_history = np.zeros((self.ntemps, nsave))
         else:
             isave = self._chain.shape[2]
@@ -505,16 +505,16 @@ class Sampler:
                                                     self.nwalkers,
                                                     nsave, self.dim))),
                                          axis=2)
-            self._lnprob = np.concatenate((self._lnprob,
-                                           np.zeros((self.ntemps,
-                                                     self.nwalkers,
-                                                     nsave))),
-                                          axis=2)
-            self._lnlikelihood = np.concatenate((self._lnlikelihood,
-                                                 np.zeros((self.ntemps,
+            self._logprob = np.concatenate((self._logprob,
+                                            np.zeros((self.ntemps,
+                                                      self.nwalkers,
+                                                      nsave))),
+                                           axis=2)
+            self._loglikelihood = np.concatenate((self._loglikelihood,
+                                                  np.zeros((self.ntemps,
                                                            self.nwalkers,
                                                            nsave))),
-                                                axis=2)
+                                                 axis=2)
             self._beta_history = np.concatenate((self._beta_history,
                                           np.zeros((self.ntemps, nsave))),
                                          axes=1)
@@ -535,7 +535,7 @@ class Sampler:
             final ``1-fburnin`` fraction of the samples will be used to
             compute the evidence; the default is ``fburnin = 0.1``.
 
-        :return ``(lnZ, dlnZ)``: Returns an estimate of the
+        :return ``(logZ, dlogZ)``: Returns an estimate of the
             log-evidence and the error associated with the finite
             number of temperatures at which the posterior has been
             sampled.
@@ -559,16 +559,16 @@ class Sampler:
 
         .. math::
 
-            \\frac{d \\ln Z}{d \\beta}
-            = \\frac{1}{Z(\\beta)} \\int d\\theta l^\\beta p \\ln l
-            = \\left \\langle \\ln l \\right \\rangle_\\beta
+            \\frac{d \\log Z}{d \\beta}
+            = \\frac{1}{Z(\\beta)} \\int d\\theta l^\\beta p \\log l
+            = \\left \\langle \\log l \\right \\rangle_\\beta
 
         so
 
         .. math::
 
-            \\ln Z(\\beta = 1)
-            = \\int_0^1 d\\beta \\left \\langle \\ln l \\right\\rangle_\\beta
+            \\log Z(\\beta = 1)
+            = \\int_0^1 d\\beta \\left \\langle \\log l \\right\\rangle_\\beta
 
         By computing the average of the log-likelihood at the
         difference temperatures, the sampler can approximate the above
@@ -576,7 +576,7 @@ class Sampler:
         """
 
         if logls is None:
-            logls = self.lnlikelihood
+            logls = self.loglikelihood
 
         istart = int(logls.shape[2] * fburnin + 0.5)
         mean_logls = np.mean(np.mean(logls, axis=1)[:, istart:], axis=1)
@@ -593,9 +593,9 @@ class Sampler:
             betas2 = np.concatenate((self._betas[:-1:2], [0]))
             mean_logls2 = np.concatenate((mean_logls[:-1:2], [mean_logls[-1]]))
 
-        lnZ = -np.trapz(mean_logls, betas)
-        lnZ2 = -np.trapz(mean_logls2, betas2)
-        return lnZ, np.abs(lnZ - lnZ2)
+        logZ = -np.trapz(mean_logls, betas)
+        logZ2 = -np.trapz(mean_logls2, betas2)
+        return logZ, np.abs(logZ - logZ2)
 
     @property
     def betas(self):
@@ -626,20 +626,20 @@ class Sampler:
         return self._chain.reshape((s[0], -1, s[3]))
 
     @property
-    def lnprobability(self):
+    def logprobability(self):
         """
-        Matrix of lnprobability values; shape ``(Ntemps, Nwalkers, Nsteps)``.
+        Matrix of logprobability values; shape ``(Ntemps, Nwalkers, Nsteps)``.
 
         """
-        return self._lnprob
+        return self._logprob
 
     @property
-    def lnlikelihood(self):
+    def loglikelihood(self):
         """
-        Matrix of ln-likelihood values; shape ``(Ntemps, Nwalkers, Nsteps)``.
+        Matrix of log-likelihood values; shape ``(Ntemps, Nwalkers, Nsteps)``.
 
         """
-        return self._lnlikelihood
+        return self._loglikelihood
 
     @property
     def beta_history(self):

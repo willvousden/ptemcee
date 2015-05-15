@@ -11,10 +11,10 @@ from .sampler import Sampler
 logprecision = -4
 
 
-def lnprob_gaussian(x, icov):
+def logprob_gaussian(x, icov):
     return -np.dot(x, np.dot(icov, x)) / 2.0
 
-def lnprob_gaussian_nan(x, icov):
+def logprob_gaussian_nan(x, icov):
     # if walker's parameters are zeros => return NaN
     if not (np.array(x)).any():
         result = np.nan
@@ -49,7 +49,7 @@ class LogLikeGaussian(object):
         self.test_nan = test_nan
 
     def __call__(self, x):
-        f = lnprob_gaussian_nan if self.test_nan else lnprob_gaussian
+        f = logprob_gaussian_nan if self.test_nan else logprob_gaussian
         dist2 = f(x, self.icov)
 
         return dist2
@@ -60,7 +60,7 @@ class LogPriorGaussian(object):
         self.cutoff = cutoff
 
     def __call__(self, x):
-        dist2 = lnprob_gaussian(x, self.icov)
+        dist2 = logprob_gaussian(x, self.icov)
 
         if self.cutoff is not None:
             if -dist2 > self.cutoff * self.cutoff / 2.0:
@@ -125,24 +125,24 @@ class Tests:
         gaussian_integral = self.ndim / 2.0 * np.log(2.0 * np.pi) \
             + 0.5 * np.log(np.linalg.det(self.cov))
 
-        lnZ, dlnZ = self.sampler.thermodynamic_integration_log_evidence()
+        logZ, dlogZ = self.sampler.thermodynamic_integration_log_evidence()
 
-        assert np.abs(lnZ - (gaussian_integral - log_volume)) < 3 * dlnZ, \
-            "evidence incorrect: {0:g}+/{1:g} versus correct {2:g}".format(lnZ,
+        assert np.abs(logZ - (gaussian_integral - log_volume)) < 3 * dlogZ, \
+            "evidence incorrect: {0:g}+/{1:g} versus correct {2:g}".format(logZ,
                                                                            gaussian_integral - log_volume,
-                                                                           dlnZ)
+                                                                           dlogZ)
         assert np.all((np.mean(chain, axis=0) - self.mean) ** 2.0 / N ** 2.0
                       < maxdiff), 'mean incorrect'
         assert np.all((np.cov(chain, rowvar=0) - self.cov) ** 2.0 / N ** 2.0
                       < maxdiff), 'covariance incorrect'
 
-    def test_nan_lnprob(self):
+    def test_nan_logprob(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov, test_nan=True),
                                LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=self.Tmax)
 
-        # If a walker is right at zero, ``lnprobfn`` returns ``np.nan``.
+        # If a walker is right at zero, ``logprobfn`` returns ``np.nan``.
         p0 = self.p0
         p0[-1][0][:] = 0.0
 
@@ -222,8 +222,8 @@ class Tests:
         self.check_sampler(cutoff=self.cutoff)
 
     #def test_blobs(self):
-        #lnprobfn = lambda p: (-0.5 * np.sum(p ** 2), np.random.rand())
-        #self.sampler = EnsembleSampler(self.nwalkers, self.ndim, lnprobfn)
+        #logprobfn = lambda p: (-0.5 * np.sum(p ** 2), np.random.rand())
+        #self.sampler = EnsembleSampler(self.nwalkers, self.ndim, logprobfn)
         #self.check_sampler(cutoff=self.cutoff)
 
         ## Make sure that the shapes of everything are as expected.
