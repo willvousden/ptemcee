@@ -4,14 +4,13 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = ["PTSampler", "default_beta_ladder"]
+__all__ = ["Sampler", "default_beta_ladder"]
 
 import numpy as np
 import numpy.random as nr
 import multiprocessing as multi
 
 from . import autocorr
-from .sampler import Sampler
 
 def default_beta_ladder(ndim, ntemps=None, Tmax=None):
     """
@@ -136,7 +135,7 @@ class PTLikePrior(object):
 
         return self.logl(x, *self.loglargs, **self.loglkwargs), lp
 
-class PTSampler(Sampler):
+class Sampler:
     """
     A parallel-tempered ensemble sampler, using :class:`EnsembleSampler`
     for sampling within each parallel chain.  
@@ -591,7 +590,7 @@ class PTSampler(Sampler):
         else:
             betas = self._betas
             betas2 = np.concatenate((self._betas[:-1:2], [0]))
-            mean_logls2 = np.concatenate((mean_logls[:-1:2], mean_logls[-1]))
+            mean_logls2 = np.concatenate((mean_logls[:-1:2], [mean_logls[-1]]))
 
         lnZ = -np.trapz(mean_logls, betas)
         lnZ2 = -np.trapz(mean_logls2, betas2)
