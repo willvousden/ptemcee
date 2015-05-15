@@ -14,7 +14,6 @@ logprecision = -4
 def lnprob_gaussian(x, icov):
     return -np.dot(x, np.dot(icov, x)) / 2.0
 
-
 def lnprob_gaussian_nan(x, icov):
     # if walker's parameters are zeros => return NaN
     if not (np.array(x)).any():
@@ -23,7 +22,6 @@ def lnprob_gaussian_nan(x, icov):
         result = -np.dot(x, np.dot(icov, x)) / 2.0
 
     return result
-
 
 def log_unit_sphere_volume(ndim):
     if ndim % 2 == 0:
@@ -38,9 +36,8 @@ def log_unit_sphere_volume(ndim):
         return (ndim + 1) / 2.0 * np.log(2.0) \
             + (ndim - 1) / 2.0 * np.log(np.pi) - logfactorial
 
-
 class LogLikeGaussian(object):
-    def __init__(self, icov):
+    def __init__(self, icov, test_nan=False):
         """Initialize a gaussian PDF with the given inverse covariance
         matrix.  If not ``None``, ``cutoff`` truncates the PDF at the
         given number of sigma from the origin (i.e. the PDF is
@@ -49,12 +46,13 @@ class LogLikeGaussian(object):
         integration with a flat prior is logarithmically divergent."""
 
         self.icov = icov
+        self.test_nan = test_nan
 
     def __call__(self, x):
-        dist2 = lnprob_gaussian(x, self.icov)
+        f = lnprob_gaussian_nan if self.test_nan else lnprob_gaussian
+        dist2 = f(x, self.icov)
 
         return dist2
-
 
 class LogPriorGaussian(object):
     def __init__(self, icov, cutoff=None):
@@ -138,22 +136,23 @@ class Tests:
         assert np.all((np.cov(chain, rowvar=0) - self.cov) ** 2.0 / N ** 2.0
                       < maxdiff), 'covariance incorrect'
 
-    # def test_nan_lnprob(self):
-        # self.sampler = Sampler(self.nwalkers, self.ndim,
-                               # lnprob_gaussian_nan,
-                               # args=[self.icov])
+    def test_nan_lnprob(self):
+        self.sampler = Sampler(self.nwalkers, self.ndim,
+                               LogLikeGaussian(self.icov, test_nan=True),
+                               LogPriorGaussian(self.icov, cutoff=self.cutoff),
+                               ntemps=self.ntemps, Tmax=self.Tmax)
 
-        # # If a walker is right at zero, ``lnprobfn`` returns ``np.nan``.
-        # p0 = self.p0
-        # p0[-1][0] = 0.0
+        # If a walker is right at zero, ``lnprobfn`` returns ``np.nan``.
+        p0 = self.p0
+        p0[-1][0][:] = 0.0
 
-        # try:
-            # self.check_sampler(p0=p0)
-        # except ValueError:
-            # # This should fail *immediately* with a ``ValueError``.
-            # pass
-        # else:
-            # assert False, "The sampler should have failed by now."
+        try:
+            self.check_sampler(p0=p0)
+        except ValueError:
+            # This should fail *immediately* with a ``ValueError``.
+            pass
+        else:
+            assert False, "The sampler should have failed by now."
 
     def test_inf_nan_params(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,

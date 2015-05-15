@@ -128,12 +128,18 @@ class PTLikePrior(object):
 
     def __call__(self, x):
         lp = self.logp(x, *self.logpargs, **self.logpkwargs)
+        if np.isnan(lp):
+            raise ValueError('Prior function returned NaN.')
 
         if lp == float('-inf'):
             # Can't return -inf, since this messes with beta=0 behaviour.
-            return 0, lp
+            ll = 0
+        else:
+            ll = self.logl(x, *self.loglargs, **self.loglkwargs)
+            if np.isnan(ll).any():
+                raise ValueError('Log likelihood function returned NaN.')
 
-        return self.logl(x, *self.loglargs, **self.loglkwargs), lp
+        return ll, lp
 
 class Sampler:
     """
@@ -198,14 +204,8 @@ class Sampler:
                  loglargs=[], logpargs=[],
                  loglkwargs={}, logpkwargs={},
                  adaptation_lag=10000, adaptation_time=100):
-        self.logl = logl
-        self.logp = logp
+        self._likeprior = PTLikePrior(logl, logp, loglargs, logpargs, loglkwargs, logpkwargs)
         self.a = a
-        self.loglargs = loglargs
-        self.logpargs = logpargs
-        self.loglkwargs = loglkwargs
-        self.logpkwargs = logpkwargs
-
         self.nwalkers = nwalkers
         self.dim = dim
         self.adaptation_time = adaptation_time
@@ -313,9 +313,7 @@ class Sampler:
 
         # If we have no lnprob or logls compute them
         if lnprob0 is None or lnlike0 is None:
-            fn = PTLikePrior(self.logl, self.logp, self.loglargs,
-                             self.logpargs, self.loglkwargs, self.logpkwargs)
-            results = list(mapf(fn, p.reshape((-1, self.dim))))
+            results = list(mapf(self._likeprior, p.reshape((-1, self.dim))))
 
             logls = np.array([r[0] for r in results]).reshape((self.ntemps,
                                                                self.nwalkers))
@@ -350,10 +348,7 @@ class Sampler:
                         (self.nwalkers // 2, 1)) * (pupdate[k, :, :] -
                                                    psample[k, js, :])
 
-                fn = PTLikePrior(self.logl, self.logp, self.loglargs,
-                                 self.logpargs, self.loglkwargs,
-                                 self.logpkwargs)
-                results = list(mapf(fn, qs.reshape((-1, self.dim))))
+                results = list(mapf(self._likeprior, qs.reshape((-1, self.dim))))
 
                 qslogls = np.array([r[0] for r in results]).reshape(
                     (self.ntemps, self.nwalkers//2))
