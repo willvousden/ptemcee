@@ -22,9 +22,9 @@ def read(filename):
 name = 'ptemcee'
 
 # Get current version.
-pattern = re.compile('__version__\s*=\s*"(.*?)"')
+pattern = re.compile('__version__\s*=\s*(\'|")(.*?)(\'|")')
 initPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ptemcee/__init__.py')
-pattern.findall(read(initPath))[0]
+pattern.findall(read(initPath))[0][1]
 
 setup(
     name=name,
