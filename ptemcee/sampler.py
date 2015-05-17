@@ -116,8 +116,9 @@ class LikePriorEvaluator:
 
     """
 
-    def __init__(self, logl, logp, loglargs=[], logpargs=[], loglkwargs={},
-                 logpkwargs={}):
+    def __init__(self, logl, logp,
+                 loglargs=[], logpargs=[],
+                 loglkwargs={}, logpkwargs={}):
         self.logl = logl
         self.logp = logp
         self.loglargs = loglargs
