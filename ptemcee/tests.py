@@ -114,6 +114,9 @@ class Tests:
         # assert abs(self.sampler.tswap_acceptance_fraction[0] - 0.25) < 0.05, \
             # "tswap acceptance fraction != 0.25"
 
+        assert np.all(self.sampler.acor > 0), \
+            'Invalid autocorrelation lengths.'
+
         maxdiff = 10.0 ** logprecision
 
         chain = np.reshape(self.sampler.chain[0, ...],
