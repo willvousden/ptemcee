@@ -330,10 +330,12 @@ class Sampler:
         if self._logprior0 is None or self._loglikelihood0 is None:
             results = list(mapf(self._likeprior, p.reshape((-1, self.dim))))
 
-            self._loglikelihood0 = np.array([r[0] for r in results]).reshape((self.ntemps,
-                                                                              self.nwalkers))
-            self._logprior0 = np.array([r[1] for r in results]).reshape((self.ntemps,
-                                                                         self.nwalkers))
+            self._loglikelihood0 = np.fromiter((r[0] for r in results), np.float,
+                                               count=len(results)).reshape((self.ntemps,
+                                                                            self.nwalkers))
+            self._logprior0 = np.fromiter((r[1] for r in results), np.float,
+                                          count=len(results)).reshape((self.ntemps,
+                                                                       self.nwalkers))
 
         logl = self._loglikelihood0
         logp = self._logprior0
@@ -365,10 +367,12 @@ class Sampler:
 
                 results = list(mapf(self._likeprior, qs.reshape((-1, self.dim))))
 
-                qslogl = np.array([r[0] for r in results]).reshape(
-                    (self.ntemps, self.nwalkers//2))
-                qslogp = np.array([r[1] for r in results]).reshape(
-                    (self.ntemps, self.nwalkers//2))
+                qslogl = np.fromiter((r[0] for r in results), float,
+                                     count=len(results)).reshape((self.ntemps,
+                                                                  self.nwalkers//2))
+                qslogp = np.fromiter((r[1] for r in results), float,
+                                     count=len(results)).reshape((self.ntemps,
+                                                                  self.nwalkers//2))
                 qslogpost = qslogl * betas + qslogp
 
                 logpaccept = self.dim*np.log(zs) + qslogpost \
