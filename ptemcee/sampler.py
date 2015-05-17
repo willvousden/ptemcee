@@ -254,7 +254,7 @@ class Sampler:
         # Reset sampler state.
         self._time = 0
         self._p0 = None
-        self._logprior0 = None
+        self._logposterior0 = None
         self._loglikelihood0 = None
         if betas is not None:
             self._betas = betas
@@ -309,7 +309,7 @@ class Sampler:
         if p0 is not None:
             # Start anew.
             self._p0 = p = np.array(p0).copy()
-            self._logprior0 = None
+            self._logposterior0 = None
             self._loglikelihood0 = None
         elif self._p0 is not None:
             # Now, where were we?
@@ -323,23 +323,17 @@ class Sampler:
         if np.any(np.isnan(p)):
             raise ValueError('At least one parameter value was NaN.')
 
-        mapf = map if self.pool is None else self.pool.map
-        betas = self._betas.reshape((-1, 1))
 
         # If we have no likelihood or prior values, compute them.
-        if self._logprior0 is None or self._loglikelihood0 is None:
-            results = list(mapf(self._likeprior, p.reshape((-1, self.dim))))
+        betas = self._betas.reshape((-1, 1))
+        if self._logposterior0 is None or self._loglikelihood0 is None:
+            logl, logp = self._evaluate(p)
 
-            self._loglikelihood0 = np.fromiter((r[0] for r in results), np.float,
-                                               count=len(results)).reshape((self.ntemps,
-                                                                            self.nwalkers))
-            self._logprior0 = np.fromiter((r[1] for r in results), np.float,
-                                          count=len(results)).reshape((self.ntemps,
-                                                                       self.nwalkers))
-
-        logl = self._loglikelihood0
-        logp = self._logprior0
-        logpost = logl * betas + logp
+            self._loglikelihood0 = logl
+            logpost = self._logposterior0 = logl * betas + logp
+        else:
+            logl = self._loglikelihood0
+            logpost = self._logposterior0
 
         # Expand the chain in advance of the iterations
         if storechain:
@@ -365,14 +359,7 @@ class Sampler:
                         (self.nwalkers // 2, 1)) * (pupdate[k, :, :] -
                                                    psample[k, js, :])
 
-                results = list(mapf(self._likeprior, qs.reshape((-1, self.dim))))
-
-                qslogl = np.fromiter((r[0] for r in results), float,
-                                     count=len(results)).reshape((self.ntemps,
-                                                                  self.nwalkers//2))
-                qslogp = np.fromiter((r[1] for r in results), float,
-                                     count=len(results)).reshape((self.ntemps,
-                                                                  self.nwalkers//2))
+                qslogl, qslogp = self._evaluate(qs)
                 qslogpost = qslogl * betas + qslogp
 
                 logpaccept = self.dim*np.log(zs) + qslogpost \
@@ -390,15 +377,13 @@ class Sampler:
                     qslogpost.reshape((-1,))[accepts]
                 logl[:, jupdate::2].reshape((-1,))[accepts] = \
                     qslogl.reshape((-1,))[accepts]
-                logp[:, jupdate::2].reshape((-1,))[accepts] = \
-                    qslogp.reshape((-1,))[accepts]
 
                 accepts = accepts.reshape((self.ntemps, self.nwalkers//2))
 
                 self.nprop[:, jupdate::2] += 1.0
                 self.nprop_accepted[:, jupdate::2] += accepts
 
-            p, ratios = self._temperature_swaps(self._betas, p, logpost, logl, logp)
+            p, ratios = self._temperature_swaps(self._betas, p, logpost, logl)
 
             # TODO Should the notion of a "complete" iteration really include the temperature
             # adjustment?
@@ -418,7 +403,18 @@ class Sampler:
             self._time += 1
             yield p, logpost, logl
 
-    def _temperature_swaps(self, betas, p, logpost, logl, logp):
+    def _evaluate(self, ps):
+        mapf = map if self.pool is None else self.pool.map
+        results = list(mapf(self._likeprior, ps.reshape((-1, self.dim))))
+
+        logl = np.fromiter((r[0] for r in results), np.float,
+                           count=len(results)).reshape((self.ntemps, -1))
+        logp = np.fromiter((r[1] for r in results), np.float,
+                           count=len(results)).reshape((self.ntemps, -1))
+
+        return logl, logp
+
+    def _temperature_swaps(self, betas, p, logpost, logl):
         """
         Perform parallel-tempering temperature swaps on the state
         in ``p`` with associated ``logpost`` and ``logl``.
@@ -451,18 +447,15 @@ class Sampler:
 
             ptemp = np.copy(p[i, iperm[asel], :])
             logltemp = np.copy(logl[i, iperm[asel]])
-            logptemp = np.copy(logp[i, iperm[asel]])
             logprtemp = np.copy(logpost[i, iperm[asel]])
 
             p[i, iperm[asel], :] = p[i - 1, i1perm[asel], :]
             logl[i, iperm[asel]] = logl[i - 1, i1perm[asel]]
-            logp[i, iperm[asel]] = logp[i - 1, i1perm[asel]]
             logpost[i, iperm[asel]] = logpost[i - 1, i1perm[asel]] \
                 - dbeta * logl[i - 1, i1perm[asel]]
 
             p[i - 1, i1perm[asel], :] = ptemp
             logl[i - 1, i1perm[asel]] = logltemp
-            logp[i - 1, i1perm[asel]] = logptemp
             logpost[i - 1, i1perm[asel]] = logprtemp + dbeta * logltemp
 
         return p, ratios
