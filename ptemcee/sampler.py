@@ -7,7 +7,6 @@ from __future__ import (division, print_function, absolute_import,
 __all__ = ["Sampler", "default_beta_ladder"]
 
 import numpy as np
-import numpy.random as nr
 import multiprocessing as multi
 
 from . import autocorr
@@ -203,7 +202,13 @@ class Sampler:
                  threads=1, pool=None, a=2.0,
                  loglargs=[], logpargs=[],
                  loglkwargs={}, logpkwargs={},
-                 adaptation_lag=10000, adaptation_time=100):
+                 adaptation_lag=10000, adaptation_time=100,
+                 random=None):
+        if random is None:
+            self._random = np.random.mtrand.RandomState()
+        else:
+            self._random = random
+
         self._likeprior = LikePriorEvaluator(logl, logp, loglargs, logpargs, loglkwargs, logpkwargs)
         self.a = a
         self.nwalkers = nwalkers
@@ -231,7 +236,7 @@ class Sampler:
 
         self.reset()
 
-    def reset(self):
+    def reset(self, random=None):
         """
         Clear the ``time``, ``chain``, ``logposterior``,
         ``loglikelihood``,  ``acceptance_fraction``,
@@ -257,6 +262,9 @@ class Sampler:
         self.nprop = np.zeros((self.ntemps, self.nwalkers), dtype=np.float)
         self.nprop_accepted = np.zeros((self.ntemps, self.nwalkers),
                                        dtype=np.float)
+
+        if random is not None:
+            self._random = random
 
     def sample(self, p0=None,
                iterations=1, thin=1,
@@ -342,14 +350,14 @@ class Sampler:
                 psample = p[:, jsample::2, :]
 
                 # TODO Replace random.
-                zs = np.exp(np.random.uniform(low=-np.log(self.a),
-                                              high=np.log(self.a),
-                                              size=(self.ntemps, self.nwalkers//2)))
+                zs = np.exp(self._random.uniform(low=-np.log(self.a),
+                                                 high=np.log(self.a),
+                                                 size=(self.ntemps, self.nwalkers//2)))
 
                 qs = np.zeros((self.ntemps, self.nwalkers//2, self.dim))
                 for k in range(self.ntemps):
-                    js = np.random.randint(0, high=self.nwalkers // 2,
-                                           size=self.nwalkers // 2)
+                    js = self._random.randint(0, high=self.nwalkers // 2,
+                                              size=self.nwalkers // 2)
                     qs[k, :, :] = psample[k, js, :] + zs[k, :].reshape(
                         (self.nwalkers // 2, 1)) * (pupdate[k, :, :] -
                                                    psample[k, js, :])
@@ -364,9 +372,9 @@ class Sampler:
 
                 logpaccept = self.dim*np.log(zs) + qslogpost \
                     - logpost[:, jupdate::2]
-                logr = np.log(np.random.uniform(low=0.0, high=1.0,
-                                                size=(self.ntemps,
-                                                      self.nwalkers//2)))
+                logr = np.log(self._random.uniform(low=0.0, high=1.0,
+                                                   size=(self.ntemps,
+                                                         self.nwalkers//2)))
 
                 accepts = logr < logpaccept
                 accepts = accepts.flatten()
@@ -419,10 +427,10 @@ class Sampler:
 
             dbeta = bi1 - bi
 
-            iperm = nr.permutation(self.nwalkers)
-            i1perm = nr.permutation(self.nwalkers)
+            iperm = self._random.permutation(self.nwalkers)
+            i1perm = self._random.permutation(self.nwalkers)
 
-            raccept = np.log(nr.uniform(size=self.nwalkers))
+            raccept = np.log(self._random.uniform(size=self.nwalkers))
             paccept = dbeta * (logl[i, iperm] - logl[i - 1, i1perm])
 
             self.nswap[i] += self.nwalkers

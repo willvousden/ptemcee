@@ -267,11 +267,12 @@ class Tests:
         assert s.chain.shape[2] == 2 * N, \
             'Expected chain of length {0}; got {1}.'.format(2 * N, s.chain.shape[2])
 
-        # # Now do the same run afresh and compare the results.
-        # chain0 = s.chain.copy()
-        # betas0 = s.betas.copy()
-        # s.reset()
-        # for i in s.sample(self.p0, iterations=2 * N):
-            # pass
-        # assert np.all(s.chain == chain0), 'Chains don\'t match!'
-        # assert np.all(s.betas == betas0), 'Ladders don\'t match!'
+        # # Now do the same run afresh and compare the results.  Given the same seed, the they
+        # should be identical.
+        chain0 = s.chain.copy()
+        betas0 = s.betas.copy()
+        s.reset(random=)
+        for i in s.sample(self.p0, iterations=2 * N):
+            pass
+        assert np.all(s.chain == chain0), 'Chains don\'t match!'
+        assert np.all(s.betas == betas0), 'Ladders don\'t match!'
