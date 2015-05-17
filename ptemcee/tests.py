@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # encoding: utf-8
-"""
+'''
 Defines various nose unit tests
 
-"""
+'''
 
 from __future__ import division
 
@@ -39,12 +39,12 @@ def log_unit_sphere_volume(ndim):
 
 class LogLikeGaussian(object):
     def __init__(self, icov, test_nan=False):
-        """Initialize a gaussian PDF with the given inverse covariance
+        '''Initialize a gaussian PDF with the given inverse covariance
         matrix.  If not ``None``, ``cutoff`` truncates the PDF at the
         given number of sigma from the origin (i.e. the PDF is
         non-zero only on an ellipse aligned with the principal axes of
         the distribution).  Without this cutoff, thermodynamic
-        integration with a flat prior is logarithmically divergent."""
+        integration with a flat prior is logarithmically divergent.'''
 
         self.icov = icov
         self.test_nan = test_nan
@@ -107,12 +107,12 @@ class Tests:
 
         # Weaker assertions on acceptance fraction
         assert np.mean(self.sampler.acceptance_fraction) > 0.1, \
-            "acceptance fraction < 0.1"
+            'acceptance fraction < 0.1'
         assert np.mean(self.sampler.tswap_acceptance_fraction) > 0.1, \
-            "tswap acceptance fraction < 0.1"
+            'tswap acceptance fraction < 0.1'
         # TODO
         # assert abs(self.sampler.tswap_acceptance_fraction[0] - 0.25) < 0.05, \
-            # "tswap acceptance fraction != 0.25"
+            # 'tswap acceptance fraction != 0.25'
 
         assert np.all(self.sampler.acor > 0), \
             'Invalid autocorrelation lengths.'
@@ -131,7 +131,7 @@ class Tests:
         logZ, dlogZ = self.sampler.thermodynamic_integration_log_evidence()
 
         assert np.abs(logZ - (gaussian_integral - log_volume)) < 3 * dlogZ, \
-            "evidence incorrect: {0:g}+/{1:g} versus correct {2:g}".format(logZ,
+            'evidence incorrect: {0:g}+/{1:g} versus correct {2:g}'.format(logZ,
                                                                            gaussian_integral - log_volume,
                                                                            dlogZ)
         assert np.all((np.mean(chain, axis=0) - self.mean) ** 2.0 / N ** 2.0
@@ -155,7 +155,7 @@ class Tests:
             # This should fail *immediately* with a ``ValueError``.
             pass
         else:
-            assert False, "The sampler should have failed by now."
+            assert False, 'The sampler should have failed by now.'
 
     def test_inf_nan_params(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
@@ -174,7 +174,7 @@ class Tests:
             # This should fail *immediately* with a ``ValueError``.
             pass
         else:
-            assert False, "The sampler should have failed by now."
+            assert False, 'The sampler should have failed by now.'
 
         # Set one of the walkers to have a ``np.inf`` value.
         p0[-1][0][0] = np.inf
@@ -185,7 +185,7 @@ class Tests:
             # This should fail *immediately* with a ``ValueError``.
             pass
         else:
-            assert False, "The sampler should have failed by now."
+            assert False, 'The sampler should have failed by now.'
 
         # Set one of the walkers to have a ``np.inf`` value.
         p0[-1][0][0] = -np.inf
@@ -196,7 +196,7 @@ class Tests:
             # This should fail *immediately* with a ``ValueError``.
             pass
         else:
-            assert False, "The sampler should have failed by now."
+            assert False, 'The sampler should have failed by now.'
 
     def test_parallel(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
@@ -230,7 +230,7 @@ class Tests:
         # assert (self.sampler.chain.shape == (self.nwalkers, self.N, self.ndim)
                 # and len(self.sampler.blobs) == self.N
                 # and len(self.sampler.blobs[0]) == self.nwalkers), \
-            # "The blob dimensions are wrong."
+            # 'The blob dimensions are wrong.'
 
         # # Make sure that the blobs aren't all the same.
         # blobs = self.sampler.blobs
