@@ -5,11 +5,12 @@ Defines various nose unit tests
 
 """
 
+from __future__ import division
+
 import numpy as np
 from .sampler import Sampler
 
 logprecision = -4
-
 
 def logprob_gaussian(x, icov):
     return -np.dot(x, np.dot(icov, x)) / 2.0
@@ -92,7 +93,6 @@ class Tests:
         self.p0 = [[0.1 * np.random.randn(self.ndim)
                     for i in range(self.nwalkers)]
                    for j in range(self.ntemps)]
-        #self.truth = np.random.multivariate_normal(self.mean, self.cov, 100000)
 
     def check_sampler(self, cutoff=None, N=None, p0=None):
         if cutoff is None:
@@ -208,8 +208,6 @@ class Tests:
                                LogLikeGaussian(self.icov),
                                LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=self.Tmax)
-        #p0 = np.random.multivariate_normal(mean=self.mean, cov=self.cov,
-                                           #size=(self.sampler.ntemps, self.nwalkers))
         self.check_sampler(cutoff=self.cutoff)
 
     def test_temp_inf(self):
@@ -221,38 +219,59 @@ class Tests:
                                            #size=(self.sampler.ntemps, self.nwalkers))
         self.check_sampler(cutoff=self.cutoff)
 
-    #def test_blobs(self):
-        #logprobfn = lambda p: (-0.5 * np.sum(p ** 2), np.random.rand())
-        #self.sampler = EnsembleSampler(self.nwalkers, self.ndim, logprobfn)
-        #self.check_sampler(cutoff=self.cutoff)
+    # TODO Fix this.
+    # def test_blobs(self):
+        # logprobfn = lambda p: (-0.5 * np.sum(p ** 2), np.random.rand())
+        # self.sampler = EnsembleSampler(self.nwalkers, self.ndim, logprobfn)
+        # self.check_sampler(cutoff=self.cutoff)
 
-        ## Make sure that the shapes of everything are as expected.
-        #assert (self.sampler.chain.shape == (self.nwalkers, self.N, self.ndim)
-                #and len(self.sampler.blobs) == self.N
-                #and len(self.sampler.blobs[0]) == self.nwalkers), \
-            #"The blob dimensions are wrong."
+        # # Make sure that the shapes of everything are as expected.
+        # assert (self.sampler.chain.shape == (self.nwalkers, self.N, self.ndim)
+                # and len(self.sampler.blobs) == self.N
+                # and len(self.sampler.blobs[0]) == self.nwalkers), \
+            # "The blob dimensions are wrong."
 
-        ## Make sure that the blobs aren't all the same.
-        #blobs = self.sampler.blobs
-        #assert np.any([blobs[-1] != blobs[i] for i in range(len(blobs) - 1)])
+        # # Make sure that the blobs aren't all the same.
+        # blobs = self.sampler.blobs
+        # assert np.any([blobs[-1] != blobs[i] for i in range(len(blobs) - 1)])
 
-    # def test_resume(self):
-        # self.sampler = s = Sampler(self.nwalkers, self.ndim,
-                                   # LogLikeGaussian(self.icov),
-                                   # LogPriorGaussian(self.icov, cutoff=self.cutoff),
-                                   # ntemps=self.ntemps, Tmax=self.Tmax)
+    def test_resume(self):
+        self.sampler = s = Sampler(self.nwalkers, self.ndim,
+                                   LogLikeGaussian(self.icov),
+                                   LogPriorGaussian(self.icov, cutoff=self.cutoff),
+                                   ntemps=self.ntemps, Tmax=self.Tmax)
+        N = self.N // 2
 
-        # # first time around need to specify p0
-        # try:
-            # s.run_mcmc(None, self.N)
-        # except ValueError:
+        # First time around need to specify p0.
+        try:
+            # s.run_mcmc(None, N)
+            for i in s.sample(iterations=N):
+                pass
+        except ValueError:
+            pass
+        else:
+            assert False, 'Should fail if no starting parameters are given.'
+
+        for i in s.sample(self.p0, iterations=N):
+            pass
+        # s.run_mcmc(self.p0, N=N)
+        assert s.chain.shape[2] == N, \
+            'Expected chain of length {0}; got {1}.'.format(N, s.chain.shape[2])
+
+        # This doesn't actually check that it resumes with the right values, as
+        # that's non-trivial... so we just make sure it does *something* when
+        # None is given and that it records whatever it does.
+        for i in s.sample(self.p0, iterations=N):
+            pass
+        # s.run_mcmc(N=N)
+        assert s.chain.shape[2] == 2 * N, \
+            'Expected chain of length {0}; got {1}.'.format(2 * N, s.chain.shape[2])
+
+        # # Now do the same run afresh and compare the results.
+        # chain0 = s.chain.copy()
+        # betas0 = s.betas.copy()
+        # s.reset()
+        # for i in s.sample(self.p0, iterations=2 * N):
             # pass
-
-        # s.run_mcmc(self.p0, N=self.N)
-        # assert s.chain.shape[1] == self.N
-
-        # # this doesn't actually check that it resumes with the right values, as
-        # # that's non-trivial... so we just make sure it does *something* when
-        # # None is given and that it records whatever it does
-        # s.run_mcmc(None, N=self.N)
-        # assert s.chain.shape[1] == 2 * self.N
+        # assert np.all(s.chain == chain0), 'Chains don\'t match!'
+        # assert np.all(s.betas == betas0), 'Ladders don\'t match!'
