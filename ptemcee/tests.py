@@ -94,7 +94,7 @@ class Tests:
                     for i in range(self.nwalkers)]
                    for j in range(self.ntemps)]
 
-    def check_sampler(self, cutoff=None, N=None, p0=None):
+    def check_sampler(self, cutoff=None, N=None, p0=None, adapt=False):
         if cutoff is None:
             cutoff = self.cutoff
         if N is None:
@@ -102,7 +102,7 @@ class Tests:
         if p0 is None:
             p0 = self.p0
 
-        for i in self.sampler.sample(p0, iterations=N):
+        for i in self.sampler.sample(p0, iterations=N, adapt=adapt):
             pass
 
         # Weaker assertions on acceptance fraction
@@ -203,12 +203,12 @@ class Tests:
                                threads=2)
         self.check_sampler(cutoff=self.cutoff)
 
-    def test_gaussian(self):
+    def test_gaussian_adapt(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov),
                                LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=self.Tmax)
-        self.check_sampler(cutoff=self.cutoff)
+        self.check_sampler(cutoff=self.cutoff, adapt=True)
 
     def test_temp_inf(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
@@ -238,39 +238,29 @@ class Tests:
                                    LogLikeGaussian(self.icov),
                                    LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                    ntemps=self.ntemps, Tmax=self.Tmax)
+        adapt = True
         N = self.N // 2
 
-        # First time around need to specify p0.
-        try:
-            # s.run_mcmc(None, N)
-            for i in s.sample(iterations=N):
-                pass
-        except ValueError:
+        state = s.random.get_state()
+        betas = s.betas.copy()
+        for i in s.sample(self.p0, iterations=N, adapt=adapt):
             pass
-        else:
-            assert False, 'Should fail if no starting parameters are given.'
-
-        for i in s.sample(self.p0, iterations=N):
-            pass
-        # s.run_mcmc(self.p0, N=N)
         assert s.chain.shape[2] == N, \
             'Expected chain of length {0}; got {1}.'.format(N, s.chain.shape[2])
 
-        # This doesn't actually check that it resumes with the right values, as
-        # that's non-trivial... so we just make sure it does *something* when
-        # None is given and that it records whatever it does.
-        for i in s.sample(self.p0, iterations=N):
+        for i in s.sample(iterations=N, adapt=adapt):
             pass
-        # s.run_mcmc(N=N)
         assert s.chain.shape[2] == 2 * N, \
             'Expected chain of length {0}; got {1}.'.format(2 * N, s.chain.shape[2])
 
-        # # Now do the same run afresh and compare the results.  Given the same seed, the they
+        # TODO: Is this condition too strong?
+        # Now do the same run afresh and compare the results.  Given the same seed, the they
         # should be identical.
         chain0 = s.chain.copy()
         betas0 = s.betas.copy()
-        s.reset(random=)
-        for i in s.sample(self.p0, iterations=2 * N):
+        s.reset(betas=betas)
+        s.random.set_state(state)
+        for i in s.sample(self.p0, iterations=2 * N, adapt=adapt):
             pass
         assert np.all(s.chain == chain0), 'Chains don\'t match!'
         assert np.all(s.betas == betas0), 'Ladders don\'t match!'

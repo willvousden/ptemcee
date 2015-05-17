@@ -236,7 +236,7 @@ class Sampler:
 
         self.reset()
 
-    def reset(self, random=None):
+    def reset(self, random=None, betas=None):
         """
         Clear the ``time``, ``chain``, ``logposterior``,
         ``loglikelihood``,  ``acceptance_fraction``,
@@ -255,6 +255,8 @@ class Sampler:
         self._p0 = None
         self._logprior0 = None
         self._loglikelihood0 = None
+        if betas is not None:
+            self._betas = betas
 
         self.nswap = np.zeros(self.ntemps, dtype=np.float)
         self.nswap_accepted = np.zeros(self.ntemps, dtype=np.float)
