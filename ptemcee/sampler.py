@@ -260,8 +260,7 @@ class Sampler:
         self.nswap_accepted = np.zeros(self.ntemps, dtype=np.float)
 
         self.nprop = np.zeros((self.ntemps, self.nwalkers), dtype=np.float)
-        self.nprop_accepted = np.zeros((self.ntemps, self.nwalkers),
-                                       dtype=np.float)
+        self.nprop_accepted = np.zeros((self.ntemps, self.nwalkers), dtype=np.float)
 
         if random is not None:
             self._random = random
@@ -324,7 +323,7 @@ class Sampler:
         mapf = map if self.pool is None else self.pool.map
         betas = self._betas.reshape((-1, 1))
 
-        # If we have no logpost or logls compute them
+        # If we have no likelihood or prior values, compute them.
         if self._logprior0 is None or self._loglikelihood0 is None:
             results = list(mapf(self._likeprior, p.reshape((-1, self.dim))))
 
@@ -349,7 +348,6 @@ class Sampler:
                 pupdate = p[:, jupdate::2, :]
                 psample = p[:, jsample::2, :]
 
-                # TODO Replace random.
                 zs = np.exp(self._random.uniform(low=-np.log(self.a),
                                                  high=np.log(self.a),
                                                  size=(self.ntemps, self.nwalkers//2)))
@@ -402,7 +400,7 @@ class Sampler:
                 betas += dbetas
                 logpost += dbetas * logl
 
-            if (i + 1) % thin == 0:
+            if (self._time + 1) % thin == 0:
                 if storechain:
                     self._chain[:, :, isave, :] = p
                     self._logposterior[:, :, isave] = logpost
@@ -535,8 +533,8 @@ class Sampler:
                                                            nsave))),
                                                  axis=2)
             self._beta_history = np.concatenate((self._beta_history,
-                                          np.zeros((self.ntemps, nsave))),
-                                         axis=1)
+                                                 np.zeros((self.ntemps, nsave))),
+                                                axis=1)
 
         return isave
 
@@ -615,6 +613,15 @@ class Sampler:
         logZ = -np.trapz(mean_logls, betas)
         logZ2 = -np.trapz(mean_logls2, betas2)
         return logZ, np.abs(logZ - logZ2)
+
+    @property
+    def random(self):
+        """
+        Returns the random number generator for the sampler.
+        
+        """
+
+        return self._random
 
     @property
     def betas(self):

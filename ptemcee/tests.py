@@ -215,8 +215,6 @@ class Tests:
                                LogLikeGaussian(self.icov),
                                LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=np.inf)
-        #p0 = np.random.multivariate_normal(mean=self.mean, cov=self.cov,
-                                           #size=(self.sampler.ntemps, self.nwalkers))
         self.check_sampler(cutoff=self.cutoff)
 
     # TODO Fix this.
