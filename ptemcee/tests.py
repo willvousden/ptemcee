@@ -239,7 +239,7 @@ class Tests:
                                    LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                    ntemps=self.ntemps, Tmax=self.Tmax)
         adapt = True
-        N = self.N // 2
+        N = 10
 
         state = s.random.get_state()
         betas = s.betas.copy()
