@@ -44,7 +44,7 @@ def default_beta_ladder(ndim, ntemps=None, Tmax=None):
     * If ``Tmax`` and ``ntemps`` are specified:
 
       * If ``Tmax = inf``, place one chain at ``inf`` and ``ntemps-1`` in a 25% geometric spacing.
-      * Else, use the unique geometric spacing defined by ``ntemps`` and ``Tmax``. 
+      * Else, use the unique geometric spacing defined by ``ntemps`` and ``Tmax``.
 
     """
 
@@ -144,7 +144,7 @@ class LikePriorEvaluator:
 class Sampler:
     """
     A parallel-tempered ensemble sampler, using :class:`EnsembleSampler`
-    for sampling within each parallel chain.  
+    for sampling within each parallel chain.
 
     :param nwalkers:
         The number of ensemble walkers at each temperature.
@@ -199,7 +199,7 @@ class Sampler:
 
     """
     def __init__(self, nwalkers, dim, logl, logp,
-                 ntemps=None, Tmax=None, betas=None, 
+                 ntemps=None, Tmax=None, betas=None,
                  threads=1, pool=None, a=2.0,
                  loglargs=[], logpargs=[],
                  loglkwargs={}, logpkwargs={},
@@ -322,7 +322,6 @@ class Sampler:
             raise ValueError('At least one parameter value was infinite.')
         if np.any(np.isnan(p)):
             raise ValueError('At least one parameter value was NaN.')
-
 
         # If we have no likelihood or prior values, compute them.
         betas = self._betas.reshape((-1, 1))
@@ -618,7 +617,7 @@ class Sampler:
     def random(self):
         """
         Returns the random number generator for the sampler.
-        
+
         """
 
         return self._random
