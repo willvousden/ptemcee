@@ -237,7 +237,7 @@ class Sampler(object):
 
         self.reset()
 
-    def reset(self, random=None, betas=None):
+    def reset(self, random=None, betas=None, time=None):
         """
         Clear the ``time``, ``chain``, ``logposterior``,
         ``loglikelihood``,  ``acceptance_fraction``,
@@ -267,6 +267,8 @@ class Sampler(object):
 
         if random is not None:
             self._random = random
+        if time is not None:
+            self._time = time
 
     def sample(self, p0=None,
                iterations=1, thin=1,
@@ -629,6 +631,14 @@ class Sampler(object):
 
         """
         return self._betas
+
+    @property
+    def time(self):
+        """
+        Returns the current time, in iterations, of the sampler.
+
+        """
+        return self._time
 
     @property
     def chain(self):
