@@ -110,7 +110,7 @@ def default_beta_ladder(ndim, ntemps=None, Tmax=None):
 
     return betas
 
-class LikePriorEvaluator:
+class LikePriorEvaluator(object):
     """
     Wrapper class for logl and logp.
 
@@ -141,7 +141,7 @@ class LikePriorEvaluator:
 
         return ll, lp
 
-class Sampler:
+class Sampler(object):
     """
     A parallel-tempered ensemble sampler, using :class:`EnsembleSampler`
     for sampling within each parallel chain.
