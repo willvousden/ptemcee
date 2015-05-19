@@ -116,7 +116,7 @@ class Tests(object):
         assert np.all(np.diff(self.sampler.betas) != 0), \
             'Temperatures have coalesced.'
         assert np.all(np.diff(self.sampler.betas) < 0), \
-            'Temperaturs incorrectly ordered.'
+            'Temperatures incorrectly ordered.'
         assert np.all(self.sampler.acor > 0), \
             'Invalid autocorrelation lengths.'
 
