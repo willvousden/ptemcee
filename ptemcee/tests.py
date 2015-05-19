@@ -113,6 +113,10 @@ class Tests(object):
         # assert abs(self.sampler.tswap_acceptance_fraction[0] - 0.25) < 0.05, \
             # 'tswap acceptance fraction != 0.25'
 
+        assert np.all(np.diff(self.sampler.betas) != 0), \
+            'Temperatures have coalesced.'
+        assert np.all(np.diff(self.sampler.betas) < 0), \
+            'Temperaturs incorrectly ordered.'
         assert np.all(self.sampler.acor > 0), \
             'Invalid autocorrelation lengths.'
 
@@ -219,22 +223,6 @@ class Tests(object):
                                ntemps=self.ntemps, Tmax=np.inf)
         self.check_sampler(cutoff=self.cutoff)
 
-    # TODO Fix this.
-    # def test_blobs(self):
-        # logprobfn = lambda p: (-0.5 * np.sum(p ** 2), np.random.rand())
-        # self.sampler = EnsembleSampler(self.nwalkers, self.ndim, logprobfn)
-        # self.check_sampler(cutoff=self.cutoff)
-
-        # # Make sure that the shapes of everything are as expected.
-        # assert (self.sampler.chain.shape == (self.nwalkers, self.N, self.ndim)
-                # and len(self.sampler.blobs) == self.N
-                # and len(self.sampler.blobs[0]) == self.nwalkers), \
-            # 'The blob dimensions are wrong.'
-
-        # # Make sure that the blobs aren't all the same.
-        # blobs = self.sampler.blobs
-        # assert np.any([blobs[-1] != blobs[i] for i in range(len(blobs) - 1)])
-
     def test_resume(self):
         self.sampler = s = Sampler(self.nwalkers, self.ndim,
                                    LogLikeGaussian(self.icov),
@@ -266,3 +254,19 @@ class Tests(object):
             pass
         assert np.all(s.chain == chain0), 'Chains don\'t match!'
         assert np.all(s.betas == betas0), 'Ladders don\'t match!'
+
+    # TODO Fix this.
+    # def test_blobs(self):
+        # logprobfn = lambda p: (-0.5 * np.sum(p ** 2), np.random.rand())
+        # self.sampler = EnsembleSampler(self.nwalkers, self.ndim, logprobfn)
+        # self.check_sampler(cutoff=self.cutoff)
+
+        # # Make sure that the shapes of everything are as expected.
+        # assert (self.sampler.chain.shape == (self.nwalkers, self.N, self.ndim)
+                # and len(self.sampler.blobs) == self.N
+                # and len(self.sampler.blobs[0]) == self.nwalkers), \
+            # 'The blob dimensions are wrong.'
+
+        # # Make sure that the blobs aren't all the same.
+        # blobs = self.sampler.blobs
+        # assert np.any([blobs[-1] != blobs[i] for i in range(len(blobs) - 1)])
