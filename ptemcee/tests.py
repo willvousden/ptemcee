@@ -71,7 +71,7 @@ class LogPriorGaussian(object):
         else:
             return 0.0
 
-class Tests:
+class Tests(object):
 
     def setUp(self):
         self.nwalkers = 100
