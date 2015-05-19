@@ -84,8 +84,7 @@ class Tests(object):
         self.N = 1000
 
         self.mean = np.zeros(self.ndim)
-        self.cov = 0.5 - np.random.rand(self.ndim ** 2) \
-            .reshape((self.ndim, self.ndim))
+        self.cov = 0.5 - np.random.rand(self.ndim, self.ndim)
         self.cov = np.triu(self.cov)
         self.cov += self.cov.T - np.diag(self.cov.diagonal())
         self.cov = np.dot(self.cov, self.cov)
