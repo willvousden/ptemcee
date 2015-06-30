@@ -270,6 +270,15 @@ class Sampler(object):
         if time is not None:
             self._time = time
 
+    def run_mcmc(self, *args, **kwargs):
+        """
+        Identical to ``sample``, but returns the final ensemble and discards intermediate ensembles.
+
+        """
+        for x in self.sample(*args, **kwargs):
+            pass
+        return x
+
     def sample(self, p0=None,
                iterations=1, thin=1,
                storechain=True, adapt=False):
