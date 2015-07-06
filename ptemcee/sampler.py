@@ -281,7 +281,8 @@ class Sampler(object):
 
     def sample(self, p0=None,
                iterations=1, thin=1,
-               storechain=True, adapt=False):
+               storechain=True, adapt=False,
+               swap_ratios=False):
         """
         Advance the chains ``iterations`` steps as a generator.
 
@@ -302,17 +303,23 @@ class Sampler(object):
             property.
 
         :param adapt: (optional)
-            If ``True``, the temperature ladder is dynamically adapted as the
-            sampler runs to achieve uniform swap acceptance ratios between adjacent
-            chains.  See `arXiv:1501.05823 <http://arxiv.org/abs/1501.05823>`_ for details.
+            If ``True``, the temperature ladder is dynamically adapted as the sampler runs to
+            achieve uniform swap acceptance ratios between adjacent chains.  See `arXiv:1501.05823
+            <http://arxiv.org/abs/1501.05823>`_ for details.
+
+        :param swap_ratios: (optional)
+            If ``True``, also yield the instantaneous inter-chain acceptance ratios in the fourth
+            element of the yielded tuple.
 
         At each iteration, this generator yields
 
         * ``p``, the current position of the walkers.
 
-        * ``logpost`` the current posterior values for the walkers.
+        * ``logpost``, the current posterior values for the walkers.
 
-        * ``loglike`` the current likelihood values for the walkers.
+        * ``loglike``, the current likelihood values for the walkers.
+
+        * ``ratios``, the instantaneous inter-chain acceptance ratios (if requested).
 
         """
 
@@ -335,15 +342,18 @@ class Sampler(object):
             raise ValueError('At least one parameter value was NaN.')
 
         # If we have no likelihood or prior values, compute them.
-        betas = self._betas.reshape((-1, 1))
         if self._logposterior0 is None or self._loglikelihood0 is None:
             logl, logp = self._evaluate(p)
+            logpost = self._tempered_likelihood(logl) + logp
 
             self._loglikelihood0 = logl
-            logpost = self._logposterior0 = logl * betas + logp
+            self._logposterior0 = logpost
         else:
             logl = self._loglikelihood0
             logpost = self._logposterior0
+
+        if (logpost == -np.inf).any():
+            raise ValueError('Attempting to start with samples outside posterior support.')
 
         # Expand the chain in advance of the iterations
         if storechain:
@@ -370,7 +380,7 @@ class Sampler(object):
                                                    psample[k, js, :])
 
                 qslogl, qslogp = self._evaluate(qs)
-                qslogpost = qslogl * betas + qslogp
+                qslogpost = self._tempered_likelihood(qslogl) + qslogp
 
                 logpaccept = self.dim*np.log(zs) + qslogpost \
                     - logpost[:, jupdate::2]
@@ -393,14 +403,17 @@ class Sampler(object):
                 self.nprop[:, jupdate::2] += 1.0
                 self.nprop_accepted[:, jupdate::2] += accepts
 
+                assert not (logpost == -np.inf).any(), \
+                    'Samples outside posterior support during iteration {i:d}'.format(i=i)
+
             p, ratios = self._temperature_swaps(self._betas, p, logpost, logl)
 
             # TODO Should the notion of a "complete" iteration really include the temperature
             # adjustment?
             if adapt and self.ntemps > 1:
-                dbetas = self._get_ladder_adjustment(self._time, self._betas, ratios).reshape((-1, 1))
-                betas += dbetas
-                logpost += dbetas * logl
+                dbetas = self._get_ladder_adjustment(self._time, self._betas, ratios)
+                self._betas += dbetas
+                logpost += self._tempered_likelihood(logl, betas=dbetas)
 
             if (self._time + 1) % thin == 0:
                 if storechain:
@@ -411,7 +424,10 @@ class Sampler(object):
                     isave += 1
 
             self._time += 1
-            yield p, logpost, logl
+            if swap_ratios:
+                yield p, logpost, logl, ratios
+            else:
+                yield p, logpost, logl
 
     def _evaluate(self, ps):
         mapf = map if self.pool is None else self.pool.map
@@ -423,6 +439,28 @@ class Sampler(object):
                            count=len(results)).reshape((self.ntemps, -1))
 
         return logl, logp
+
+    def _tempered_likelihood(self, logl, betas=None):
+        """
+        Compute tempered log likelihood.  This is usually a mundane multiplication, except for the
+        special case where beta == 0 *and* we're outside the likelihood support.
+        
+        Here, we find a singularity that demands more careful attention; we allow the likelihood to
+        dominate the temperature, since wandering outside the likelihood support is probably a waste
+        of time.
+
+        """
+
+        if betas is None:
+            betas = self._betas
+        betas = betas.reshape((-1, 1))
+    
+        with np.errstate(invalid='ignore'):
+            loglT = logl * betas
+        loglT[np.isnan(loglT)] = -np.inf
+        # TODO: Is this correct?
+
+        return loglT
 
     def _temperature_swaps(self, betas, p, logpost, logl):
         """
