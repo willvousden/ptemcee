@@ -446,8 +446,7 @@ class Sampler(object):
         special case where beta == 0 *and* we're outside the likelihood support.
         
         Here, we find a singularity that demands more careful attention; we allow the likelihood to
-        dominate the temperature, since wandering outside the likelihood support is probably a waste
-        of time.
+        dominate the temperature, since wandering outside the likelihood support causes a discontinuity.
 
         """
 
@@ -458,7 +457,6 @@ class Sampler(object):
         with np.errstate(invalid='ignore'):
             loglT = logl * betas
         loglT[np.isnan(loglT)] = -np.inf
-        # TODO: Is this correct?
 
         return loglT
 

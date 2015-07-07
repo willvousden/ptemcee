@@ -116,7 +116,9 @@ class Tests(object):
                     break
         self.p0 = self.p0.reshape(self.ntemps, self.nwalkers, self.ndim)
 
-    def check_sampler(self, cutoff=None, N=None, p0=None, adapt=False, weak=False):
+    def check_sampler(self,
+                      cutoff=None, N=None, p0=None,
+                      adapt=False, weak=False, fail=False):
         if cutoff is None:
             cutoff = self.cutoff
         if N is None:
@@ -124,7 +126,21 @@ class Tests(object):
         if p0 is None:
             p0 = self.p0
 
-        self.sampler.run_mcmc(p0, iterations=N, adapt=adapt)
+        if fail:
+            # Require the sampler to fail before it even starts.
+            try:
+                for x in self.sampler.sample(p0, iterations=N, adapt=adapt):
+                    assert False, \
+                        'Sampler should have failed by now.'
+            except Exception as e:
+                # If a type was specified, require that the sampler fail with this exception type.
+                if type(fail) is type and type(e) is not fail:
+                    assert False, \
+                        'Sampler failed with unexpected exception type.'
+                else:
+                    return
+        else:
+            self.sampler.run_mcmc(p0, iterations=N, adapt=adapt)
 
         assert np.all(np.diff(self.sampler.betas) != 0), \
             'Temperatures have coalesced.'
@@ -173,14 +189,7 @@ class Tests(object):
         # What happens when we start the sampler outside our prior support?
         # TODO: Make this better.
         self.p0[0][0][0] = 1e6 * self.cutoff
-        
-        try:
-            self.check_sampler()
-        except ValueError:
-            # Should fail immediately.
-            pass
-        else:
-            assert False, 'The sampler should have failed by now.'
+        self.check_sampler(fail=ValueError)
 
     def test_likelihood_support(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
@@ -188,15 +197,10 @@ class Tests(object):
                                self.prior,
                                ntemps=self.ntemps, Tmax=self.Tmax)
 
-        # What happens when we start the sampler outside our prior support?  Give some walkers a
+        # What happens when we start the sampler outside our likelihood support?  Give some walkers a
         # negative parameter value, where the likelihood is unsupported.
         self.p0[0][0][0] = -1
-        try:
-            self.check_sampler()
-        except ValueError:
-            pass
-        else:
-            assert False, 'The sampler should have failed by now.'
+        self.check_sampler(fail=ValueError)
 
     def test_nan_logprob(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
@@ -205,16 +209,10 @@ class Tests(object):
                                ntemps=self.ntemps, Tmax=self.Tmax)
 
         # If a walker is right at zero, ``logprobfn`` returns ``np.nan``.
-        self.p0[-1][0][:] = 0.0
-        try:
-            self.check_sampler()
-        except ValueError:
-            pass
-        else:
-            assert False, 'The sampler should have failed by now.'
+        self.p0[-1][0][:] = 0
+        self.check_sampler(fail=ValueError)
 
     def test_inf_logprob(self):
-        # Test with infinite temperature and -inf log likelihood.
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov, test_inf=True),
                                self.prior,
@@ -222,7 +220,7 @@ class Tests(object):
 
         # If a walker has any parameter negative, ``logprobfn`` returns ``-np.inf``.  Start the
         # ensembles in the all-positive part of the parameter space, then run for long enough for
-        # sampler to migrate into negatie parts.  (We can't start outside the posterior support, or
+        # sampler to migrate into negative parts.  (We can't start outside the posterior support, or
         # the sampler will fail).  The sampler should be happy with this; otherwise, a
         # FloatingPointError will be thrown by Numpy.  Don't bother checking the results because
         # this posterior is difficult to sample.
@@ -237,35 +235,15 @@ class Tests(object):
         # Set one of the walkers to have a ``np.nan`` value.  Choose the maximum temperature as
         # we're most likely to get away with this if there's a bug.
         self.p0[-1][0][0] = np.nan
-
-        try:
-            self.check_sampler()
-        except ValueError:
-            pass
-        else:
-            assert False, 'The sampler should have failed by now.'
+        self.check_sampler(fail=ValueError)
 
         # Set one of the walkers to have a ``np.inf`` value.
         self.p0[-1][0][0] = np.inf
+        self.check_sampler(fail=ValueError)
 
-        try:
-            self.check_sampler()
-        except ValueError:
-            # This should fail *immediately* with a ``ValueError``.
-            pass
-        else:
-            assert False, 'The sampler should have failed by now.'
-
-        # Set one of the walkers to have a ``np.inf`` value.
+        # Set one of the walkers to have a ``-np.inf`` value.
         self.p0[-1][0][0] = -np.inf
-
-        try:
-            self.check_sampler()
-        except ValueError:
-            # This should fail *immediately* with a ``ValueError``.
-            pass
-        else:
-            assert False, 'The sampler should have failed by now.'
+        self.check_sampler(fail=ValueError)
 
     def test_parallel(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
