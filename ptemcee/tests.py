@@ -134,15 +134,13 @@ class Tests(object):
                         'Sampler should have failed by now.'
             except Exception as e:
                 # If a type was specified, require that the sampler fail with this exception type.
-                if type(fail) is type and type(e) is not fail:
-                    assert False, \
-                        'Sampler failed with unexpected exception type.'
-                else:
-                    return
+                assert type(fail) is not type or type(e) is fail, \
+                    'Sampler failed with unexpected exception type.'
+                return
         else:
             for p, logpost, loglike, ratios in self.sampler.sample(p0, iterations=N, adapt=adapt, swap_ratios=True):
-                assert np.all(logpost > -np.inf) and np.all(loglike) > -np.inf, \
-                    'Invalid posterior/likelihood values.'
+                assert np.all(logpost > -np.inf) and np.all(loglike > -np.inf), \
+                    'Invalid posterior/likelihood values; outside posterior support.'
                 assert np.all(ratios >= 0) and np.all(ratios <= 1), \
                     'Invalid swap ratios.'
                 assert logpost.shape == loglike.shape == p.shape[:-1], \
@@ -331,5 +329,7 @@ class Tests(object):
         s.reset(betas=betas)
         s.random.set_state(state)
         s.run_mcmc(self.p0, iterations=2 * N, adapt=True)
-        assert np.all(s.chain == chain0), 'Chains don\'t match!'
-        assert np.all(s.betas == betas0), 'Ladders don\'t match!'
+        assert np.all(s.chain == chain0), \
+            'Chains don\'t match!'
+        assert np.all(s.betas == betas0), \
+            'Ladders don\'t match!'
