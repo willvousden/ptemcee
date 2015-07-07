@@ -277,6 +277,35 @@ class Tests(object):
                                ntemps=self.ntemps, Tmax=self.Tmax)
         self.check_sampler(adapt=True)
 
+    def test_run_mcmc(self):
+        """
+        Check that ``Sampler.run_mcmc()`` is equivalent to ``Sampler.sample()``.
+
+        """
+
+        self.sampler = s = Sampler(self.nwalkers, self.ndim,
+                                   LogLikeGaussian(self.icov),
+                                   self.prior,
+                                   ntemps=self.ntemps, Tmax=self.Tmax)
+
+        adapt=True
+        N = 10
+
+        state = s.random.get_state()
+        betas = s.betas.copy()
+        s.run_mcmc(self.p0, iterations=N, adapt=adapt)
+
+        chain0 = s.chain.copy()
+        betas0 = s.betas.copy()
+        s.reset(betas=betas)
+        s.random.set_state(state)
+        for x in s.run_mcmc(self.p0, iterations=N, adapt=adapt):
+            pass
+        assert np.all(s.chain == chain0), \
+            'Chains don\'t match!'
+        assert np.all(s.betas == betas0), \
+            'Ladders don\'t match!'
+
     def test_resume(self):
         self.sampler = s = Sampler(self.nwalkers, self.ndim,
                                    LogLikeGaussian(self.icov),
