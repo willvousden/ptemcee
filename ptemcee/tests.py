@@ -141,6 +141,8 @@ class Tests(object):
                     return
         else:
             for p, logpost, loglike, ratios in self.sampler.sample(p0, iterations=N, adapt=adapt, swap_ratios=True):
+                assert np.all(logpost > -np.inf) and np.all(loglike) > -np.inf, \
+                    'Invalid posterior/likelihood values.'
                 assert np.all(ratios >= 0) and np.all(ratios <= 1), \
                     'Invalid swap ratios.'
                 assert logpost.shape == loglike.shape == p.shape[:-1], \

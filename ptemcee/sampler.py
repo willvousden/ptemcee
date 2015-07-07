@@ -403,9 +403,6 @@ class Sampler(object):
                 self.nprop[:, jupdate::2] += 1.0
                 self.nprop_accepted[:, jupdate::2] += accepts
 
-                assert not (logpost == -np.inf).any(), \
-                    'Samples outside posterior support during iteration {i:d}'.format(i=i)
-
             p, ratios = self._temperature_swaps(self._betas, p, logpost, logl)
 
             # TODO Should the notion of a "complete" iteration really include the temperature
@@ -513,12 +510,6 @@ class Sampler(object):
 
         """
 
-        # Some sanity checks on the ladder...
-        assert np.all(np.diff(betas0) < 1), \
-                'Temperatures should be in ascending order.'
-        assert betas0[0] == 1, \
-                'Bottom temperature should be 1.'
-
         betas = betas0.copy()
 
         # Modulate temperature adjustments with a hyperbolic decay.
@@ -532,9 +523,6 @@ class Sampler(object):
         deltaTs = np.diff(1 / betas[:-1])
         deltaTs *= np.exp(dSs)
         betas[1:-1] = 1 / (np.cumsum(deltaTs) + 1 / betas[0])
-
-        assert np.all(np.diff(betas) < 0), \
-                'Temperatures not correctly ordered following temperature dynamics: {:}'.format(betas)
 
         # Don't mutate the ladder here; let the client code do that.
         return betas - betas0
