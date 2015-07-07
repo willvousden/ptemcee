@@ -140,12 +140,22 @@ class Tests(object):
                 else:
                     return
         else:
-            self.sampler.run_mcmc(p0, iterations=N, adapt=adapt)
+            for p, logpost, loglike, ratios in self.sampler.sample(p0, iterations=N, adapt=adapt, swap_ratios=True):
+                assert np.all(ratios >= 0) and np.all(ratios <= 1), \
+                    'Invalid swap ratios.'
+                assert logpost.shape == loglike.shape == p.shape[:-1], \
+                    'Sampler output shapes invalid.'
+                assert p.shape[-1] == self.ndim, \
+                    'Sampler output shapes invalid.'
+                assert ratios.shape[0] == logpost.shape[0] - 1 and len(ratios.shape) == 1, \
+                    'Sampler output shapes invalid.'
+                assert np.all(self.sampler.betas > 0), \
+                    'Negative temperatures!'
+                assert np.all(np.diff(self.sampler.betas) != 0), \
+                    'Temperatures have coalesced.'
+                assert np.all(np.diff(self.sampler.betas) < 0), \
+                    'Temperatures incorrectly ordered.'
 
-        assert np.all(np.diff(self.sampler.betas) != 0), \
-            'Temperatures have coalesced.'
-        assert np.all(np.diff(self.sampler.betas) < 0), \
-            'Temperatures incorrectly ordered.'
         assert np.all(self.sampler.acor > 0), \
             'Invalid autocorrelation lengths.'
 
