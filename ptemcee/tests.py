@@ -149,7 +149,7 @@ class Tests(object):
                     'Sampler output shapes invalid.'
                 assert ratios.shape[0] == logpost.shape[0] - 1 and len(ratios.shape) == 1, \
                     'Sampler output shapes invalid.'
-                assert np.all(self.sampler.betas > 0), \
+                assert np.all(self.sampler.betas >= 0), \
                     'Negative temperatures!'
                 assert np.all(np.diff(self.sampler.betas) != 0), \
                     'Temperatures have coalesced.'
@@ -283,23 +283,21 @@ class Tests(object):
 
         """
 
+        N = 10
         self.sampler = s = Sampler(self.nwalkers, self.ndim,
                                    LogLikeGaussian(self.icov),
                                    self.prior,
                                    ntemps=self.ntemps, Tmax=self.Tmax)
 
-        adapt=True
-        N = 10
-
         state = s.random.get_state()
         betas = s.betas.copy()
-        s.run_mcmc(self.p0, iterations=N, adapt=adapt)
+        s.run_mcmc(self.p0, iterations=N, adapt=True)
 
         chain0 = s.chain.copy()
         betas0 = s.betas.copy()
         s.reset(betas=betas)
         s.random.set_state(state)
-        for x in s.run_mcmc(self.p0, iterations=N, adapt=adapt):
+        for x in s.run_mcmc(self.p0, iterations=N, adapt=True):
             pass
         assert np.all(s.chain == chain0), \
             'Chains don\'t match!'
@@ -307,20 +305,19 @@ class Tests(object):
             'Ladders don\'t match!'
 
     def test_resume(self):
+        N = 10
         self.sampler = s = Sampler(self.nwalkers, self.ndim,
                                    LogLikeGaussian(self.icov),
                                    self.prior,
                                    ntemps=self.ntemps, Tmax=self.Tmax)
-        adapt = True
-        N = 10
 
         state = s.random.get_state()
         betas = s.betas.copy()
-        s.run_mcmc(self.p0, iterations=N, adapt=adapt)
+        s.run_mcmc(self.p0, iterations=N, adapt=True)
         assert s.chain.shape[2] == N, \
             'Expected chain of length {0}; got {1}.'.format(N, s.chain.shape[2])
 
-        s.run_mcmc(iterations=N, adapt=adapt)
+        s.run_mcmc(iterations=N, adapt=True)
         assert s.chain.shape[2] == 2 * N, \
             'Expected chain of length {0}; got {1}.'.format(2 * N, s.chain.shape[2])
 
@@ -331,22 +328,6 @@ class Tests(object):
         betas0 = s.betas.copy()
         s.reset(betas=betas)
         s.random.set_state(state)
-        s.run_mcmc(self.p0, iterations=2 * N, adapt=adapt)
+        s.run_mcmc(self.p0, iterations=2 * N, adapt=True)
         assert np.all(s.chain == chain0), 'Chains don\'t match!'
         assert np.all(s.betas == betas0), 'Ladders don\'t match!'
-
-    # TODO Fix this.
-    # def test_blobs(self):
-        # logprobfn = lambda p: (-0.5 * np.sum(p ** 2), np.random.rand())
-        # self.sampler = EnsembleSampler(self.nwalkers, self.ndim, logprobfn)
-        # self.check_sampler()
-
-        # # Make sure that the shapes of everything are as expected.
-        # assert (self.sampler.chain.shape == (self.nwalkers, self.N, self.ndim)
-                # and len(self.sampler.blobs) == self.N
-                # and len(self.sampler.blobs[0]) == self.nwalkers), \
-            # 'The blob dimensions are wrong.'
-
-        # # Make sure that the blobs aren't all the same.
-        # blobs = self.sampler.blobs
-        # assert np.any([blobs[-1] != blobs[i] for i in range(len(blobs) - 1)])
