@@ -20,14 +20,14 @@ def logprob_gaussian_nan(x, icov):
     if not (np.array(x)).any():
         return np.nan
     else:
-        return -np.dot(x, np.dot(icov, x)) / 2.0
+        return logprob_gaussian(x, icov)
 
 def logprob_gaussian_inf(x, icov):
     # If any of walker's parameters are negative, return -inf.
     if (np.array(x) < 0).any():
         return -np.inf
     else:
-        return -np.dot(x, np.dot(icov, x)) / 2.0
+        return logprob_gaussian(x, icov)
 
 def log_unit_sphere_volume(ndim):
     if ndim % 2 == 0:
@@ -71,10 +71,10 @@ class LogPriorGaussian(object):
         self.cutoff = cutoff
 
     def __call__(self, x):
-        dist2 = logprob_gaussian(x, self.icov)
+        contour = logprob_gaussian(x, self.icov)
 
         if self.cutoff is not None:
-            if -dist2 > self.cutoff * self.cutoff / 2.0:
+            if -contour > self.cutoff * self.cutoff / 2.0:
                 return -np.inf
             else:
                 return 0.0
@@ -94,7 +94,6 @@ class Tests(object):
 
         self.N = 1000
 
-        self.mean = np.zeros(self.ndim)
         self.cov = 0.5 - np.random.rand(self.ndim, self.ndim)
         self.cov = np.triu(self.cov)
         self.cov += self.cov.T - np.diag(self.cov.diagonal())
