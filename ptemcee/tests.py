@@ -99,11 +99,7 @@ class Tests(object):
         self.cov += self.cov.T - np.diag(self.cov.diagonal())
         self.cov = np.dot(self.cov, self.cov)
         self.icov = np.linalg.inv(self.cov)
-
         self.prior = LogPriorGaussian(self.icov, cutoff=self.cutoff)
-        # self.p0 = [[0.1 * np.random.randn(self.ndim)
-                    # for i in range(self.nwalkers)]
-                   # for j in range(self.ntemps)]
 
         # Make sure we're starting inside prior support.
         nsamples = self.ntemps * self.nwalkers
