@@ -4,7 +4,7 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = ["Sampler", "default_beta_ladder"]
+__all__ = ["Sampler", "default_beta_ladder", "thermodynamic_integration_log_evidence"]
 
 import numpy as np
 import multiprocessing as multi
@@ -109,6 +109,77 @@ def default_beta_ladder(ndim, ntemps=None, Tmax=None):
         betas = np.concatenate((betas, [0]))
 
     return betas
+
+def thermodynamic_integration_log_evidence(betas, logls):
+    """
+    Thermodynamic integration estimate of the evidence.
+
+    :param betas: The inverse temperatures to use for the quadrature.
+
+    :param logls:  The mean log-likelihoods corresponding to ``betas`` to use for
+        computing the thermodynamic evidence.
+
+    :return ``(logZ, dlogZ)``: Returns an estimate of the
+        log-evidence and the error associated with the finite
+        number of temperatures at which the posterior has been
+        sampled.
+
+    The evidence is the integral of the un-normalized posterior
+    over all of parameter space:
+
+    .. math::
+
+        Z \\equiv \\int d\\theta \\, l(\\theta) p(\\theta)
+
+    Thermodymanic integration is a technique for estimating the
+    evidence integral using information from the chains at various
+    temperatures.  Let
+
+    .. math::
+
+        Z(\\beta) = \\int d\\theta \\, l^\\beta(\\theta) p(\\theta)
+
+    Then
+
+    .. math::
+
+        \\frac{d \\log Z}{d \\beta}
+        = \\frac{1}{Z(\\beta)} \\int d\\theta l^\\beta p \\log l
+        = \\left \\langle \\log l \\right \\rangle_\\beta
+
+    so
+
+    .. math::
+
+        \\log Z(\\beta = 1)
+        = \\int_0^1 d\\beta \\left \\langle \\log l \\right\\rangle_\\beta
+
+    By computing the average of the log-likelihood at the
+    difference temperatures, the sampler can approximate the above
+    integral.
+    """
+    if len(betas) != len(logls):
+        raise ValueError('Need the same number of log(L) values as temperatures.')
+
+    order = np.argsort(betas)[::-1]
+    betas = betas[order]
+    logls = logls[order]
+
+    betas0 = np.copy(betas)
+    if betas[-1] != 0:
+        betas = np.concatenate((betas0, [0]))
+        betas2 = np.concatenate((betas0[::2], [0]))
+
+        # Duplicate mean log-likelihood of hottest chain as a best guess for beta = 0.
+        logls2 = np.concatenate((logls[::2], [logls[-1]]))
+        logls = np.concatenate((logls, [logls[-1]]))
+    else:
+        betas2 = np.concatenate((betas0[:-1:2], [0]))
+        logls2 = np.concatenate((logls[:-1:2], [logls[-1]]))
+
+    logZ = -np.trapz(logls, betas)
+    logZ2 = -np.trapz(logls2, betas2)
+    return logZ, np.abs(logZ - logZ2)
 
 class LikePriorEvaluator(object):
     """
@@ -632,21 +703,7 @@ class Sampler(object):
         istart = int(logls.shape[2] * fburnin + 0.5)
         mean_logls = np.mean(np.mean(logls, axis=1)[:, istart:], axis=1)
 
-        if self._betas[-1] != 0:
-            betas = np.concatenate((self._betas, [0]))
-            betas2 = np.concatenate((self._betas[::2], [0]))
-
-            # Duplicate mean log-likelihood of hottest chain as a best guess for beta = 0.
-            mean_logls2 = np.concatenate((mean_logls[::2], [mean_logls[-1]]))
-            mean_logls = np.concatenate((mean_logls, [mean_logls[-1]]))
-        else:
-            betas = self._betas
-            betas2 = np.concatenate((self._betas[:-1:2], [0]))
-            mean_logls2 = np.concatenate((mean_logls[:-1:2], [mean_logls[-1]]))
-
-        logZ = -np.trapz(mean_logls, betas)
-        logZ2 = -np.trapz(mean_logls2, betas2)
-        return logZ, np.abs(logZ - logZ2)
+        return thermodynamic_integration_log_evidence(self._betas, mean_logls)
 
     @property
     def random(self):
