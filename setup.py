@@ -33,7 +33,7 @@ setup(
     author_email='will@vousden.me.uk',
     packages=['ptemcee'],
     url='https://github.com/willvousden/ptemcee',
-    download_url='https://github.com/willvousden/ptemcee/tarball/1.0.0',
+    download_url='https://github.com/willvousden/ptemcee/tarball/' + version,
     license='MIT',
     description='Parallel-tempered emcee.',
     long_description=read('README.rst'),

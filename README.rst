@@ -3,6 +3,8 @@ ptemcee
 
 .. image:: http://img.shields.io/travis/willvousden/ptemcee/master.svg?style=flat
         :target: http://travis-ci.org/willvousden/ptemcee
+.. image:: http://img.shields.io/pypi/v/ptemcee.svg?style=flat
+        :target: https://pypi.python.org/pypi/ptemcee/
 .. image:: http://img.shields.io/badge/license-MIT-blue.svg?style=flat
         :target: https://github.com/willvousden/ptemcee/blob/master/LICENSE
 .. image:: http://img.shields.io/badge/arXiv-1501.05823-orange.svg?style=flat
