@@ -9,9 +9,10 @@ ptemcee
         :target: http://arxiv.org/abs/1501.05823
 
 ptemcee /'tɛmsiː/ (noun):
-    `Adaptive parallel tempering <http://arxiv.org/abs/1501.05823>`_ meets emcee_.
+    `Adaptive parallel tempering <http://arxiv.org/abs/1501.05823>`_ meets |emcee|_.
 
-*ptemcee*, pronounced "tem-cee", is fork of Daniel Foreman-Mackey's wonderful emcee_ that is more robust against awkward, multi-modal distributions.
+*ptemcee*, pronounced "tem-cee", is fork of Daniel Foreman-Mackey's wonderful |emcee|_ that is more robust against awkward, multi-modal distributions.
+
 
 
 Documentation
@@ -34,5 +35,5 @@ License
 *ptemcee* is free software distributed under the MIT License; see the `LICENSE
 <https://github.com/willvousden/ptemcee/blob/master/LICENSE>`_ file for details.
 
-
+.. |emcee| replace:: *emcee*
 .. _emcee: https://github.com/dfm/emcee
