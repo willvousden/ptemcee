@@ -94,6 +94,7 @@ class Tests(object):
 
         self.N = 1000
 
+        self.mean = np.zeros(self.ndim)
         self.cov = 0.5 - np.random.rand(self.ndim, self.ndim)
         self.cov = np.triu(self.cov)
         self.cov += self.cov.T - np.diag(self.cov.diagonal())
@@ -173,7 +174,7 @@ class Tests(object):
             gaussian_integral = self.ndim / 2.0 * np.log(2.0 * np.pi) \
                 + 0.5 * np.log(np.linalg.det(self.cov))
 
-            logZ, dlogZ = self.sampler.thermodynamic_integration_log_evidence()
+            logZ, dlogZ = self.sampler.log_evidence_estimate()
 
             assert np.abs(logZ - (gaussian_integral - log_volume)) < 3 * dlogZ, \
                 'evidence incorrect: {0:g}+/{1:g} versus correct {2:g}'.format(logZ,

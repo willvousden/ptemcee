@@ -4,12 +4,11 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = ["Sampler", "default_beta_ladder", "thermodynamic_integration_log_evidence"]
+__all__ = ["Sampler", "default_beta_ladder"]
 
 import numpy as np
 import multiprocessing as multi
-
-from . import autocorr
+from . import util
 
 def default_beta_ladder(ndim, ntemps=None, Tmax=None):
     """
@@ -109,77 +108,6 @@ def default_beta_ladder(ndim, ntemps=None, Tmax=None):
         betas = np.concatenate((betas, [0]))
 
     return betas
-
-def thermodynamic_integration_log_evidence(betas, logls):
-    """
-    Thermodynamic integration estimate of the evidence.
-
-    :param betas: The inverse temperatures to use for the quadrature.
-
-    :param logls:  The mean log-likelihoods corresponding to ``betas`` to use for
-        computing the thermodynamic evidence.
-
-    :return ``(logZ, dlogZ)``: Returns an estimate of the
-        log-evidence and the error associated with the finite
-        number of temperatures at which the posterior has been
-        sampled.
-
-    The evidence is the integral of the un-normalized posterior
-    over all of parameter space:
-
-    .. math::
-
-        Z \\equiv \\int d\\theta \\, l(\\theta) p(\\theta)
-
-    Thermodymanic integration is a technique for estimating the
-    evidence integral using information from the chains at various
-    temperatures.  Let
-
-    .. math::
-
-        Z(\\beta) = \\int d\\theta \\, l^\\beta(\\theta) p(\\theta)
-
-    Then
-
-    .. math::
-
-        \\frac{d \\log Z}{d \\beta}
-        = \\frac{1}{Z(\\beta)} \\int d\\theta l^\\beta p \\log l
-        = \\left \\langle \\log l \\right \\rangle_\\beta
-
-    so
-
-    .. math::
-
-        \\log Z(\\beta = 1)
-        = \\int_0^1 d\\beta \\left \\langle \\log l \\right\\rangle_\\beta
-
-    By computing the average of the log-likelihood at the
-    difference temperatures, the sampler can approximate the above
-    integral.
-    """
-    if len(betas) != len(logls):
-        raise ValueError('Need the same number of log(L) values as temperatures.')
-
-    order = np.argsort(betas)[::-1]
-    betas = betas[order]
-    logls = logls[order]
-
-    betas0 = np.copy(betas)
-    if betas[-1] != 0:
-        betas = np.concatenate((betas0, [0]))
-        betas2 = np.concatenate((betas0[::2], [0]))
-
-        # Duplicate mean log-likelihood of hottest chain as a best guess for beta = 0.
-        logls2 = np.concatenate((logls[::2], [logls[-1]]))
-        logls = np.concatenate((logls, [logls[-1]]))
-    else:
-        betas2 = np.concatenate((betas0[:-1:2], [0]))
-        logls2 = np.concatenate((logls[:-1:2], [logls[-1]]))
-
-    logZ = -np.trapz(logls, betas)
-    logZ2 = -np.trapz(logls2, betas2)
-    return logZ, np.abs(logZ - logZ2)
 
 class LikePriorEvaluator(object):
     """
@@ -512,7 +440,7 @@ class Sampler(object):
         """
         Compute tempered log likelihood.  This is usually a mundane multiplication, except for the
         special case where beta == 0 *and* we're outside the likelihood support.
-        
+
         Here, we find a singularity that demands more careful attention; we allow the likelihood to
         dominate the temperature, since wandering outside the likelihood support causes a discontinuity.
 
@@ -521,7 +449,7 @@ class Sampler(object):
         if betas is None:
             betas = self._betas
         betas = betas.reshape((-1, 1))
-    
+
         with np.errstate(invalid='ignore'):
             loglT = logl * betas
         loglT[np.isnan(loglT)] = -np.inf
@@ -643,9 +571,9 @@ class Sampler(object):
 
         return isave
 
-    def thermodynamic_integration_log_evidence(self, logls=None, fburnin=0.1):
+    def log_evidence_estimate(self, logls=None, fburnin=0.1):
         """
-        Thermodynamic integration estimate of the evidence.
+        Thermodynamic integration estimate of the evidence for the sampler.
 
         :param logls: (optional) The log-likelihoods to use for
             computing the thermodynamic evidence.  If ``None`` (the
@@ -662,48 +590,19 @@ class Sampler(object):
             number of temperatures at which the posterior has been
             sampled.
 
-        The evidence is the integral of the un-normalized posterior
-        over all of parameter space:
-
-        .. math::
-
-            Z \\equiv \\int d\\theta \\, l(\\theta) p(\\theta)
-
-        Thermodymanic integration is a technique for estimating the
-        evidence integral using information from the chains at various
-        temperatures.  Let
-
-        .. math::
-
-            Z(\\beta) = \\int d\\theta \\, l^\\beta(\\theta) p(\\theta)
-
-        Then
-
-        .. math::
-
-            \\frac{d \\log Z}{d \\beta}
-            = \\frac{1}{Z(\\beta)} \\int d\\theta l^\\beta p \\log l
-            = \\left \\langle \\log l \\right \\rangle_\\beta
-
-        so
-
-        .. math::
-
-            \\log Z(\\beta = 1)
-            = \\int_0^1 d\\beta \\left \\langle \\log l \\right\\rangle_\\beta
-
-        By computing the average of the log-likelihood at the
-        difference temperatures, the sampler can approximate the above
-        integral.
+        For details, see ``thermodynamic_integration_log_evidence``.
         """
 
         if logls is None:
-            logls = self.loglikelihood
+            if self.loglikelihood is not None:
+                logls = self.loglikelihood
+            else:
+                raise ValueError('No log likelihood values available.')
 
         istart = int(logls.shape[2] * fburnin + 0.5)
         mean_logls = np.mean(np.mean(logls, axis=1)[:, istart:], axis=1)
 
-        return thermodynamic_integration_log_evidence(self._betas, mean_logls)
+        return util.thermodynamic_integration_log_evidence(self._betas, mean_logls)
 
     @property
     def random(self):
@@ -823,5 +722,5 @@ class Sampler(object):
 
         for i in range(self.ntemps):
             x = np.mean(self._chain[i, :, :, :], axis=0)
-            acors[i, :] = autocorr.integrated_time(x, window=window)
+            acors[i, :] = util.autocorr_integrated_time(x, window=window)
         return acors

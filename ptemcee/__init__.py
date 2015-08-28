@@ -6,6 +6,6 @@ from __future__ import (division, print_function, absolute_import, unicode_liter
 from .sampler import *
 from .interruptible_pool import InterruptiblePool
 from .mpi_pool import MPIPool
-from . import autocorr
+from . import util
 
 __version__ = '0.9.0'
