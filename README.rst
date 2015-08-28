@@ -13,9 +13,26 @@ ptemcee /'tɛmsiː/ (noun):
 
 *ptemcee*, pronounced "tem-cee", is fork of Daniel Foreman-Mackey's wonderful emcee_ that is more robust against awkward, multi-modal distributions.
 
+
 Documentation
-============
+-------------
 
 ... will be here soon.
+
+
+Attribution
+-----------
+
+Please cite `Vousden, Farr, Mandel (2015) <http://arxiv.org/abs/1501.05823>`_ and `Foreman-Mackey, Hogg, Lang & Goodman (2012)
+<http://arxiv.org/abs/1202.3665>`_ if you find this code useful in your
+research.
+
+
+License
+-------
+
+*ptemcee* is free software made available under the MIT License. For details see
+the LICENSE file.
+
 
 .. _emcee: https://github.com/dfm/emcee
