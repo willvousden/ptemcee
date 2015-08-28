@@ -31,8 +31,8 @@ research.
 License
 -------
 
-*ptemcee* is free software made available under the MIT License. For details see
-the LICENSE file.
+*ptemcee* is free software distributed under the MIT License; see the `LICENSE
+<https://github.com/willvousden/ptemcee/blob/master/LICENSE>`_ file for details.
 
 
 .. _emcee: https://github.com/dfm/emcee
