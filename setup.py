@@ -29,14 +29,23 @@ version = pattern.findall(read(initPath))[0][1]
 setup(
     name=name,
     version=version,
-    author='Will Farr',
-    author_email='w.farr@bham.ac.uk',
+    author='Will Vousden',
+    author_email='will@vousden.me.uk',
     packages=['ptemcee'],
-    url='???',
-    license='???',
-    description='???',
-    long_description='???',
-    package_data={'': ['LICENSE', 'AUTHORS.rst']},
+    url='https://github.com/willvousden/ptemcee',
+    download_url='https://github.com/willvousden/ptemcee/tarball/1.0.0',
+    license='MIT',
+    description='Parallel-tempered emcee.',
+    long_description=read('README.rst'),
+    package_data={'': ['LICENSE']},
     include_package_data=True,
-    install_requires=['numpy']
+    install_requires=['numpy'],
+    classifiers=[
+        'Development Status :: 5 - Production/Stable',
+        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
+        'License :: OSI Approved :: MIT License',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python',
+    ]
 )
