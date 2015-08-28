@@ -95,10 +95,10 @@ class Tests(object):
         self.N = 1000
 
         self.mean = np.zeros(self.ndim)
-        self.sqrtcov = 0.5 - np.random.rand(self.ndim, self.ndim)
-        self.sqrtcov = np.triu(self.sqrtcov)
-        self.sqrtcov += self.sqrtcov.T - np.diag(self.sqrtcov.diagonal())
-        self.cov = np.dot(self.sqrtcov, self.sqrtcov)
+        sqrtcov = 0.5 - np.random.rand(self.ndim, self.ndim)
+        sqrtcov = np.triu(sqrtcov)
+        sqrtcov += sqrtcov.T - np.diag(sqrtcov.diagonal())
+        self.cov = np.dot(sqrtcov, sqrtcov)
         self.icov = np.linalg.inv(self.cov)
         self.icov_unit = np.eye(self.ndim)
 
@@ -110,7 +110,7 @@ class Tests(object):
 
         # Now transform them to cover the prior volume.
         self.p0_unit = x * self.cutoff
-        self.p0 = np.dot(x, self.sqrtcov)
+        self.p0 = np.dot(x, sqrtcov)
 
         self.p0_unit = self.p0_unit.reshape(self.ntemps, self.nwalkers, self.ndim)
         self.p0 = self.p0.reshape(self.ntemps, self.nwalkers, self.ndim)
