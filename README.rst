@@ -14,7 +14,7 @@ ptemcee /'tɛmsiː/ (noun):
     `Adaptive parallel tempering <http://arxiv.org/abs/1501.05823>`_ meets |emcee|_.
 
 *ptemcee*, pronounced "tem-cee", is fork of Daniel Foreman-Mackey's wonderful |emcee|_ to implement
-parallel tempering more robustly.
+parallel tempering more robustly.  As far as possible, it is designed as a drop-in replacement for *emcee*.
 
 If you're trying to characterise awkward, multi-model probability distributions, then *ptemcee* is
 your friend.
