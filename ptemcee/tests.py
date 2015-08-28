@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 '''
-Defines various nose unit tests
+Defines various nose unit tests.
 
 '''
 
@@ -32,7 +32,7 @@ def logprob_gaussian_inf(x, icov):
 def log_unit_sphere_volume(ndim):
     if ndim % 2 == 0:
         logfactorial = 0.0
-        for i in range(1, ndim / 2 + 1):
+        for i in range(1, ndim // 2 + 1):
             logfactorial += np.log(i)
         return ndim / 2.0 * np.log(np.pi) - logfactorial
     else:
@@ -95,21 +95,24 @@ class Tests(object):
         self.N = 1000
 
         self.mean = np.zeros(self.ndim)
-        self.cov = 0.5 - np.random.rand(self.ndim, self.ndim)
-        self.cov = np.triu(self.cov)
-        self.cov += self.cov.T - np.diag(self.cov.diagonal())
-        self.cov = np.dot(self.cov, self.cov)
+        self.sqrtcov = 0.5 - np.random.rand(self.ndim, self.ndim)
+        self.sqrtcov = np.triu(self.sqrtcov)
+        self.sqrtcov += self.sqrtcov.T - np.diag(self.sqrtcov.diagonal())
+        self.cov = np.dot(self.sqrtcov, self.sqrtcov)
         self.icov = np.linalg.inv(self.cov)
-        self.prior = LogPriorGaussian(self.icov, cutoff=self.cutoff)
+        self.icov_unit = np.eye(self.ndim)
 
-        # Make sure we're starting inside prior support.
+        # Draw samples from unit ball.
         nsamples = self.ntemps * self.nwalkers
-        self.p0 = np.zeros((nsamples, self.ndim))
-        for i in range(nsamples):
-            while True:
-                self.p0[i] = 0.1 * np.random.randn(self.ndim)
-                if self.prior(self.p0[i]) > -np.inf:
-                    break
+        x = np.random.randn(nsamples, self.ndim)
+        x /= np.linalg.norm(x, axis=-1).reshape((nsamples, 1))
+        x *= np.random.rand(nsamples).reshape((nsamples, 1)) ** (1 / self.ndim)
+
+        # Now transform them to cover the prior volume.
+        self.p0_unit = x * self.cutoff
+        self.p0 = np.dot(x, self.sqrtcov)
+
+        self.p0_unit = self.p0_unit.reshape(self.ntemps, self.nwalkers, self.ndim)
         self.p0 = self.p0.reshape(self.ntemps, self.nwalkers, self.ndim)
 
     def check_sampler(self,
@@ -188,40 +191,40 @@ class Tests(object):
 
     def test_prior_support(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
-                               LogLikeGaussian(self.icov),
-                               self.prior,
+                               LogLikeGaussian(self.icov_unit),
+                               LogPriorGaussian(self.icov_unit, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=self.Tmax)
 
         # What happens when we start the sampler outside our prior support?
-        # TODO: Make this better.
-        self.p0[0][0][0] = 1e6 * self.cutoff
-        self.check_sampler(fail=ValueError)
+        self.p0_unit[0][0][0] = 1e6 * self.cutoff
+        self.check_sampler(p0=self.p0_unit, fail=ValueError)
 
     def test_likelihood_support(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
-                               LogLikeGaussian(self.icov, test_inf=True),
-                               self.prior,
+                               LogLikeGaussian(self.icov_unit, test_inf=True),
+                               LogPriorGaussian(self.icov_unit, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=self.Tmax)
 
         # What happens when we start the sampler outside our likelihood support?  Give some walkers a
         # negative parameter value, where the likelihood is unsupported.
-        self.p0[0][0][0] = -1
-        self.check_sampler(fail=ValueError)
+        self.p0_unit[0][0][0] = -1
+        self.check_sampler(p0=self.p0_unit, fail=ValueError)
 
     def test_nan_logprob(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
-                               LogLikeGaussian(self.icov, test_nan=True),
-                               self.prior,
+                               LogLikeGaussian(self.icov_unit, test_nan=True),
+                               LogPriorGaussian(self.icov_unit, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=self.Tmax)
 
-        # If a walker is right at zero, ``logprobfn`` returns ``np.nan``.
-        self.p0[-1][0][:] = 0
-        self.check_sampler(fail=ValueError)
+        # If a walker is right at zero, ``logprobfn`` returns ``np.nan``; sampler should fail with a
+        # ``ValueError``.
+        self.p0_unit[-1][0][:] = 0
+        self.check_sampler(p0=self.p0_unit, fail=ValueError)
 
     def test_inf_logprob(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
-                               LogLikeGaussian(self.icov, test_inf=True),
-                               self.prior,
+                               LogLikeGaussian(self.icov_unit, test_inf=True),
+                               LogPriorGaussian(self.icov_unit, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=np.inf)
 
         # If a walker has any parameter negative, ``logprobfn`` returns ``-np.inf``.  Start the
@@ -230,31 +233,31 @@ class Tests(object):
         # the sampler will fail).  The sampler should be happy with this; otherwise, a
         # FloatingPointError will be thrown by Numpy.  Don't bother checking the results because
         # this posterior is difficult to sample.
-        self.check_sampler(p0=np.abs(self.p0), weak=True)
+        self.check_sampler(p0=np.abs(self.p0_unit), weak=True)
 
     def test_inf_nan_params(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
-                               LogLikeGaussian(self.icov),
-                               self.prior,
+                               LogLikeGaussian(self.icov_unit),
+                               LogPriorGaussian(self.icov_unit, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=self.Tmax)
 
         # Set one of the walkers to have a ``np.nan`` value.  Choose the maximum temperature as
         # we're most likely to get away with this if there's a bug.
-        self.p0[-1][0][0] = np.nan
-        self.check_sampler(fail=ValueError)
+        self.p0_unit[-1][0][0] = np.nan
+        self.check_sampler(p0=self.p0_unit, fail=ValueError)
 
         # Set one of the walkers to have a ``np.inf`` value.
-        self.p0[-1][0][0] = np.inf
-        self.check_sampler(fail=ValueError)
+        self.p0_unit[-1][0][0] = np.inf
+        self.check_sampler(p0=self.p0_unit, fail=ValueError)
 
         # Set one of the walkers to have a ``-np.inf`` value.
-        self.p0[-1][0][0] = -np.inf
-        self.check_sampler(fail=ValueError)
+        self.p0_unit[-1][0][0] = -np.inf
+        self.check_sampler(p0=self.p0_unit, fail=ValueError)
 
     def test_parallel(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov),
-                               self.prior,
+                               LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=self.Tmax,
                                threads=2)
         self.check_sampler()
@@ -262,14 +265,14 @@ class Tests(object):
     def test_temp_inf(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov),
-                               self.prior,
+                               LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=np.inf)
         self.check_sampler()
 
     def test_gaussian_adapt(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov),
-                               self.prior,
+                               LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                ntemps=self.ntemps, Tmax=self.Tmax)
         self.check_sampler(adapt=True)
 
@@ -282,7 +285,7 @@ class Tests(object):
         N = 10
         self.sampler = s = Sampler(self.nwalkers, self.ndim,
                                    LogLikeGaussian(self.icov),
-                                   self.prior,
+                                   LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                    ntemps=self.ntemps, Tmax=self.Tmax)
 
         state = s.random.get_state()
@@ -304,7 +307,7 @@ class Tests(object):
         N = 10
         self.sampler = s = Sampler(self.nwalkers, self.ndim,
                                    LogLikeGaussian(self.icov),
-                                   self.prior,
+                                   LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                    ntemps=self.ntemps, Tmax=self.Tmax)
 
         state = s.random.get_state()
