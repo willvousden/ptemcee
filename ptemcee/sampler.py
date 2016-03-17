@@ -97,14 +97,16 @@ def default_beta_ladder(ndim, ntemps=None, Tmax=None):
             Tmax = tstep ** (ntemps - 1)
     else:
         if Tmax is None:
-            raise ValueError('Must specify at least one of ``ntemps'' and finite ``Tmax``.')
+            raise ValueError('Must specify at least one of ``ntemps'' and '
+                             'finite ``Tmax``.')
 
         # Determine ntemps from Tmax.
         ntemps = int(np.log(Tmax) / np.log(tstep) + 2)
 
     betas = np.logspace(0, -np.log10(Tmax), ntemps)
     if appendInf:
-        # Use a geometric spacing, but replace the top-most temperature with infinity.
+        # Use a geometric spacing, but replace the top-most temperature with
+        # infinity.
         betas = np.concatenate((betas, [0]))
 
     return betas
@@ -209,7 +211,9 @@ class Sampler(object):
         else:
             self._random = random
 
-        self._likeprior = LikePriorEvaluator(logl, logp, loglargs, logpargs, loglkwargs, logpkwargs)
+        self._likeprior = LikePriorEvaluator(logl, logp,
+                                             loglargs, logpargs,
+                                             loglkwargs, logpkwargs)
         self.a = a
         self.nwalkers = nwalkers
         self.dim = dim
@@ -220,7 +224,9 @@ class Sampler(object):
         if betas is not None:
             self._betas = np.array(betas).copy()
         else:
-            self._betas = default_beta_ladder(self.dim, ntemps=ntemps, Tmax=Tmax)
+            self._betas = default_beta_ladder(self.dim,
+                                              ntemps=ntemps,
+                                              Tmax=Tmax)
 
         # Make sure ladder is ascending in temperature.
         self._betas[::-1].sort()
@@ -228,7 +234,8 @@ class Sampler(object):
         if self.nwalkers % 2 != 0:
             raise ValueError('The number of walkers must be even.')
         if self.nwalkers < 2 * self.dim:
-            raise ValueError('The number of walkers must be greater than ``2*dimension``.')
+            raise ValueError('The number of walkers must be greater than '
+                             '``2*dimension``.')
 
         self.pool = pool
         if threads > 1 and pool is None:
@@ -258,11 +265,15 @@ class Sampler(object):
         if betas is not None:
             self._betas = betas
 
-        self.nswap = np.zeros(self.ntemps, dtype=np.float)
-        self.nswap_accepted = np.zeros(self.ntemps, dtype=np.float)
+        self.nswap = np.zeros(self.ntemps,
+                              dtype=np.float)
+        self.nswap_accepted = np.zeros(self.ntemps,
+                                       dtype=np.float)
 
-        self.nprop = np.zeros((self.ntemps, self.nwalkers), dtype=np.float)
-        self.nprop_accepted = np.zeros((self.ntemps, self.nwalkers), dtype=np.float)
+        self.nprop = np.zeros((self.ntemps, self.nwalkers),
+                              dtype=np.float)
+        self.nprop_accepted = np.zeros((self.ntemps, self.nwalkers),
+                                       dtype=np.float)
 
         if random is not None:
             self._random = random
@@ -352,7 +363,8 @@ class Sampler(object):
             logpost = self._logposterior0
 
         if (logpost == -np.inf).any():
-            raise ValueError('Attempting to start with samples outside posterior support.')
+            raise ValueError('Attempting to start with samples outside '
+                             'posterior support.')
 
         # Expand the chain in advance of the iterations
         if storechain:
@@ -362,10 +374,12 @@ class Sampler(object):
             self._stretch(p, logpost, logl)
             p, ratios = self._temperature_swaps(self._betas, p, logpost, logl)
 
-            # TODO Should the notion of a "complete" iteration really include the temperature
-            # adjustment?
+            # TODO Should the notion of a "complete" iteration really include
+            # the temperature adjustment?
             if adapt and self.ntemps > 1:
-                dbetas = self._get_ladder_adjustment(self._time, self._betas, ratios)
+                dbetas = self._get_ladder_adjustment(self._time,
+                                                     self._betas,
+                                                     ratios)
                 self._betas += dbetas
                 logpost += self._tempered_likelihood(logl, betas=dbetas)
 
@@ -397,7 +411,8 @@ class Sampler(object):
 
             zs = np.exp(self._random.uniform(low=-np.log(self.a),
                                              high=np.log(self.a),
-                                             size=(self.ntemps, self.nwalkers//2)))
+                                             size=(self.ntemps,
+                                                   self.nwalkers//2)))
 
             qs = np.zeros((self.ntemps, self.nwalkers//2, self.dim))
             for k in range(self.ntemps):
@@ -572,7 +587,8 @@ class Sampler(object):
                                                            nsave))),
                                                  axis=2)
             self._beta_history = np.concatenate((self._beta_history,
-                                                 np.zeros((self.ntemps, nsave))),
+                                                 np.zeros((self.ntemps,
+                                                           nsave))),
                                                 axis=1)
 
         return isave
@@ -608,7 +624,8 @@ class Sampler(object):
         istart = int(logls.shape[2] * fburnin + 0.5)
         mean_logls = np.mean(np.mean(logls, axis=1)[:, istart:], axis=1)
 
-        return util.thermodynamic_integration_log_evidence(self._betas, mean_logls)
+        return util.thermodynamic_integration_log_evidence(self._betas,
+                                                           mean_logls)
 
     @property
     def random(self):
