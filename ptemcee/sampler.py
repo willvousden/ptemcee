@@ -359,49 +359,7 @@ class Sampler(object):
             isave = self._expand_chain(iterations // thin)
 
         for i in range(iterations):
-            for j in [0, 1]:
-                # Get positions of walkers to be updated and walker to be sampled.
-                jupdate = j
-                jsample = (j + 1) % 2
-                pupdate = p[:, jupdate::2, :]
-                psample = p[:, jsample::2, :]
-
-                zs = np.exp(self._random.uniform(low=-np.log(self.a),
-                                                 high=np.log(self.a),
-                                                 size=(self.ntemps, self.nwalkers//2)))
-
-                qs = np.zeros((self.ntemps, self.nwalkers//2, self.dim))
-                for k in range(self.ntemps):
-                    js = self._random.randint(0, high=self.nwalkers // 2,
-                                              size=self.nwalkers // 2)
-                    qs[k, :, :] = psample[k, js, :] + zs[k, :].reshape(
-                        (self.nwalkers // 2, 1)) * (pupdate[k, :, :] -
-                                                   psample[k, js, :])
-
-                qslogl, qslogp = self._evaluate(qs)
-                qslogpost = self._tempered_likelihood(qslogl) + qslogp
-
-                logpaccept = self.dim*np.log(zs) + qslogpost \
-                    - logpost[:, jupdate::2]
-                logr = np.log(self._random.uniform(low=0.0, high=1.0,
-                                                   size=(self.ntemps,
-                                                         self.nwalkers//2)))
-
-                accepts = logr < logpaccept
-                accepts = accepts.flatten()
-
-                pupdate.reshape((-1, self.dim))[accepts, :] = \
-                    qs.reshape((-1, self.dim))[accepts, :]
-                logpost[:, jupdate::2].reshape((-1,))[accepts] = \
-                    qslogpost.reshape((-1,))[accepts]
-                logl[:, jupdate::2].reshape((-1,))[accepts] = \
-                    qslogl.reshape((-1,))[accepts]
-
-                accepts = accepts.reshape((self.ntemps, self.nwalkers//2))
-
-                self.nprop[:, jupdate::2] += 1.0
-                self.nprop_accepted[:, jupdate::2] += accepts
-
+            self._stretch(p, logpost, logl)
             p, ratios = self._temperature_swaps(self._betas, p, logpost, logl)
 
             # TODO Should the notion of a "complete" iteration really include the temperature
@@ -424,6 +382,54 @@ class Sampler(object):
                 yield p, logpost, logl, ratios
             else:
                 yield p, logpost, logl
+
+    def _stretch(self, p, logpost, logl):
+        """
+        Perform the stretch-move proposal on each ensemble.
+
+        """
+        for j in [0, 1]:
+            # Get positions of walkers to be updated and walker to be sampled.
+            jupdate = j
+            jsample = (j + 1) % 2
+            pupdate = p[:, jupdate::2, :]
+            psample = p[:, jsample::2, :]
+
+            zs = np.exp(self._random.uniform(low=-np.log(self.a),
+                                             high=np.log(self.a),
+                                             size=(self.ntemps, self.nwalkers//2)))
+
+            qs = np.zeros((self.ntemps, self.nwalkers//2, self.dim))
+            for k in range(self.ntemps):
+                js = self._random.randint(0, high=self.nwalkers // 2,
+                                          size=self.nwalkers // 2)
+                qs[k, :, :] = psample[k, js, :] + zs[k, :].reshape(
+                    (self.nwalkers // 2, 1)) * (pupdate[k, :, :] -
+                                               psample[k, js, :])
+
+            qslogl, qslogp = self._evaluate(qs)
+            qslogpost = self._tempered_likelihood(qslogl) + qslogp
+
+            logpaccept = self.dim*np.log(zs) + qslogpost \
+                - logpost[:, jupdate::2]
+            logr = np.log(self._random.uniform(low=0.0, high=1.0,
+                                               size=(self.ntemps,
+                                                     self.nwalkers//2)))
+
+            accepts = logr < logpaccept
+            accepts = accepts.flatten()
+
+            pupdate.reshape((-1, self.dim))[accepts, :] = \
+                qs.reshape((-1, self.dim))[accepts, :]
+            logpost[:, jupdate::2].reshape((-1,))[accepts] = \
+                qslogpost.reshape((-1,))[accepts]
+            logl[:, jupdate::2].reshape((-1,))[accepts] = \
+                qslogl.reshape((-1,))[accepts]
+
+            accepts = accepts.reshape((self.ntemps, self.nwalkers//2))
+
+            self.nprop[:, jupdate::2] += 1.0
+            self.nprop_accepted[:, jupdate::2] += accepts
 
     def _evaluate(self, ps):
         mapf = map if self.pool is None else self.pool.map
