@@ -25,6 +25,6 @@ install:
     conda install -c conda-forge conda-build numpy setuptools nose
     $env:CONDA_PREFIX = "C:\Miniconda$env:CONDA"
 build_script:
-- ps: python setup.py install
+- cmd: pip install .
 test_script:
-- ps: nosetests
+- cmd: nosetests
