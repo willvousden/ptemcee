@@ -12,6 +12,8 @@ your friend.
 
 .. image:: http://img.shields.io/travis/willvousden/ptemcee/master.svg?style=flat
         :target: http://travis-ci.org/willvousden/ptemcee
+.. image:: https://ci.appveyor.com/api/projects/status/3wrvp0ecggmpv0s1?svg=true
+        :target: https://ci.appveyor.com/project/willvousden/ptemcee
 .. image:: http://img.shields.io/pypi/v/ptemcee.svg?style=flat
         :target: https://pypi.python.org/pypi/ptemcee/
 .. image:: http://img.shields.io/badge/license-MIT-blue.svg?style=flat
