@@ -15,7 +15,7 @@ except ImportError:
 # Use UTF-8 if Python 3.
 major, minor1, minor2, release, serial = sys.version_info
 def read(filename):
-    kwargs = {'encoding': 'utf-8'} if major > 3 else {}
+    kwargs = {'encoding': 'utf-8'} if major >= 3 else {}
     with open(filename, **kwargs) as f:
         return f.read()
 
