@@ -6,6 +6,7 @@
 *.so
 venv*
 build/*
+.cache
 
 dist
 emcee.egg-info
