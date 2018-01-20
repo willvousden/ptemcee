@@ -1,30 +1,51 @@
-build: false
-image: Visual Studio 2015
-shallow_clone: false
-platform:
-- x86
-- x64
+# Adapated from https://github.com/pypa/pipenv/blob/master/appveyor.yml
+# License: CC0 1.0 Universal: http://creativecommons.org/publicdomain/zero/1.0/
+
+build: off
+
 environment:
-  global:
-    DISTUTILS_USE_SDK: 1
-    MSSdk: 1
+
+  # Create expected SHELL variable for pipenv.
+  SHELL: "windows"
+
   matrix:
-    - CONDA: 27
-    - CONDA: 35
-    - CONDA: 36
+
+    - PYTHON: "C:\\Python27-x64"
+      PYTHON_VERSION: "2.7.x"
+      PYTHON_ARCH: "64"
+
+    - PYTHON: "C:\\Python34-x64"
+      PYTHON_VERSION: "3.4.x"
+      PYTHON_ARCH: "64"
+
+    - PYTHON: "C:\\Python35-x64"
+      PYTHON_VERSION: "3.5.x"
+      PYTHON_ARCH: "64"
+
+    - PYTHON: "C:\\Python36-x64"
+      PYTHON_VERSION: "3.6.x"
+      PYTHON_ARCH: "64"
+
 install:
-- cmd: '"%VS140COMNTOOLS%\..\..\VC\vcvarsall.bat" %PLATFORM%'
-- ps: |
-    git submodule update -q --init --recursive
-    if ($env:CONDA -eq "27") { $env:CONDA = "" }
-    if ($env:PLATFORM -eq "x64") { $env:CONDA = "$env:CONDA-x64" }
-    $env:PATH = "C:\Miniconda$env:CONDA\;C:\Miniconda$env:CONDA\Scripts\;$env:PATH"
-    conda config --set always_yes yes --set changeps1 no
-    conda update -q conda
-    conda info -a
-    conda install -c conda-forge conda-build numpy setuptools pytest pytest-xdist
-    $env:CONDA_PREFIX = "C:\Miniconda$env:CONDA"
-build_script:
-- cmd: pip install .
+  # Install Python (from the official .msi of http://python.org) and pip when
+  # not already installed.
+  - ps: if (-not(Test-Path($env:PYTHON))) { & _appveyor\install.ps1 }
+
+  # Prepend newly installed Python to the PATH of this build (this cannot be
+  # done from inside the powershell script as it would require to restart
+  # the parent CMD process).
+  - "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
+  - "SET PYTHONIOENCODING=utf-8"
+
+  # Check that we have the expected version and architecture for Python
+  - "python --version"
+  - "python -c \"import struct; print(struct.calcsize('P') * 8)\""
+
+  # Upgrade to the latest version of pip to avoid it displaying warnings
+  # about it being out of date.
+  - "pip install --disable-pip-version-check --user --upgrade pip"
+  - "pip install -e . --upgrade"
+  - "pipenv install --system --dev --skip-lock"
+
 test_script:
-- cmd: pytest -n auto
+  - "pipenv run pytest -n auto"
