@@ -11,4 +11,4 @@ init:
 test:
 	pipenv run pytest -n auto
 
-.PHONY: help init activate test
+.PHONY: help init test
