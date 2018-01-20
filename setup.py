@@ -40,7 +40,7 @@ setup(
     package_data={'': ['LICENSE']},
     include_package_data=True,
     install_requires=['numpy'],
-    tests_require=['nose'],
+    tests_require=['pytest'],
     classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Developers',
