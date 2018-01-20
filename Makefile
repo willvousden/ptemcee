@@ -6,7 +6,7 @@ help:
 
 init:
 	pip install pipenv
-	pipenv install --dev
+	pipenv install --dev --verbose
 
 test:
 	pipenv run pytest -n auto
