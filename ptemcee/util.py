@@ -4,12 +4,12 @@
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = ["autocorr_function", "autocorr_integrated_time", "thermodynamic_integration_log_evidence"]
+__all__ = ['autocorr_function', 'autocorr_integrated_time', 'thermodynamic_integration_log_evidence']
 
 import numpy as np
 
 def autocorr_function(x, axis=0, fast=False):
-    """
+    '''
     Estimate the autocorrelation function of a time series using the FFT.
 
     :param x:
@@ -24,7 +24,7 @@ def autocorr_function(x, axis=0, fast=False):
         If ``True``, only use the largest ``2^n`` entries for efficiency.
         (default: False)
 
-    """
+    '''
     x = np.atleast_1d(x)
     m = [slice(None), ] * len(x.shape)
 
@@ -45,7 +45,7 @@ def autocorr_function(x, axis=0, fast=False):
     return acf / acf[m]
 
 def autocorr_integrated_time(x, axis=0, window=50, fast=False):
-    """
+    '''
     Estimate the integrated autocorrelation time of a time series.
 
     See `Sokal's notes <http://www.stat.unc.edu/faculty/cji/Sokal.pdf>`_ on
@@ -66,7 +66,7 @@ def autocorr_integrated_time(x, axis=0, window=50, fast=False):
         If ``True``, only use the largest ``2^n`` entries for efficiency.
         (default: False)
 
-    """
+    '''
     # Compute the autocorrelation function.
     f = autocorr_function(x, axis=axis, fast=fast)
 
@@ -82,7 +82,7 @@ def autocorr_integrated_time(x, axis=0, window=50, fast=False):
     return tau
 
 def thermodynamic_integration_log_evidence(betas, logls):
-    """
+    '''
     Thermodynamic integration estimate of the evidence.
 
     :param betas: The inverse temperatures to use for the quadrature.
@@ -128,7 +128,7 @@ def thermodynamic_integration_log_evidence(betas, logls):
     By computing the average of the log-likelihood at the
     difference temperatures, the sampler can approximate the above
     integral.
-    """
+    '''
     if len(betas) != len(logls):
         raise ValueError('Need the same number of log(L) values as temperatures.')
 
