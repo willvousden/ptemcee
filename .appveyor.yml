@@ -4,12 +4,12 @@ environment:
     matrix:
         - PYTHON_MAJOR: 2
           PYTHON_MINOR: 7
-        # - PYTHON_MAJOR: 3
-          # PYTHON_MINOR: 4
-        # - PYTHON_MAJOR: 3
-          # PYTHON_MINOR: 5
-        # - PYTHON_MAJOR: 3
-          # PYTHON_MINOR: 6
+        - PYTHON_MAJOR: 3
+          PYTHON_MINOR: 4
+        - PYTHON_MAJOR: 3
+          PYTHON_MINOR: 5
+        - PYTHON_MAJOR: 3
+          PYTHON_MINOR: 6
 
 install:
     # Add Make and Python to the PATH.
@@ -30,6 +30,3 @@ test_script:
     # know why.
     - make init
     - make test
-
-on_finish:
-    - ps: $blockRdp = $true; iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
