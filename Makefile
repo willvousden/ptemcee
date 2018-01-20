@@ -9,6 +9,6 @@ init:
 	pipenv install --dev --verbose
 
 test:
-	pipenv run pytest -n auto
+	pipenv run py.test -n auto
 
 .PHONY: help init test
