@@ -26,8 +26,8 @@ install:
     - make init
 
 test_script:
-	# We have to run this again, otherwise pytest-xdist doesn't work.  Don't
-	# know why.
+    # We have to run this again, otherwise pytest-xdist doesn't work.  Don't
+    # know why.
     - make init
     - make test
 
