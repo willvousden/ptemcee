@@ -7,8 +7,9 @@ help:
 init:
 	pip install pipenv
 	pipenv install --dev
+	pipenv lock
 
 test:
-	pipenv run pytest
+	pipenv run py.test -n auto
 
-.PHONY: help init activate test
+.PHONY: help init test

@@ -1,15 +1,12 @@
 [[source]]
-
 url = "https://pypi.python.org/simple"
 name = "pypi"
 verify_ssl = true
 
-
 [dev-packages]
 pytest = "*"
-
-
-
+pytest-xdist = "*"
+funcsigs = {version = "*", markers="python_version < '3.3.0'"}
 
 [packages]
 numpy = "*"
