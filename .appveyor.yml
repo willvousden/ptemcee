@@ -24,10 +24,9 @@ install:
 
     # Install project dependencies.
     - make init
-    - pipenv lock
 
 test_script:
-    # We have to run this again, otherwise pytest-xdist doesn't work.  Don't
-    # know why.
+    # FIXME We have to run this again, otherwise pytest-xdist doesn't work.
+    # Don't know why.
     - pipenv install --dev --ignore-pipfile
     - make test
