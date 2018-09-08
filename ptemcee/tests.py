@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 # encoding: utf-8
-'''
+"""
 Defines various pytest unit tests.
 
-'''
+"""
 
 from __future__ import absolute_import, print_function, division
 
 import numpy as np
 from .sampler import Sampler, make_ladder
+from .interruptible_pool import Pool
 
 logprecision = -4
 
@@ -92,6 +93,8 @@ class LogPriorGaussian(object):
 
 
 class Tests(object):
+    sampler = None  # type: Sampler
+
     @classmethod
     def setup_class(cls):
         np.seterr(all='raise')
@@ -127,7 +130,7 @@ class Tests(object):
         cls.p0 = cls.p0.reshape(cls.ntemps, cls.nwalkers, cls.ndim)
 
     def check_sampler(self, cutoff=None, N=None, p0=None, weak=False, fail=False):
-        '''
+        """
         Check that the sampler is behaving itself.
 
         Parameters
@@ -147,7 +150,7 @@ class Tests(object):
             If specified, assert that the sampler fails with the given
             exception type.
 
-        '''
+        """
 
         if cutoff is None:
             cutoff = self.cutoff
@@ -159,52 +162,54 @@ class Tests(object):
         if fail:
             # Require the sampler to fail before it even starts.
             try:
-                for x in self.sampler.sample(p0, samples=N):
+                chain = self.sampler.chain(p0)
+                for x in chain.iterate(N):
                     assert False, \
                         'Sampler should have failed by now.'
             except Exception as e:
                 # If a type was specified, require that the sampler fail with this exception type.
-                # assert type(fail) is not type or type(e) is fail, \
-                    # 'Sampler failed with unexpected exception type: {}.'.format(e)
                 if type(e) is fail:
                     return
                 else:
                     raise
         else:
-            # TODO Check swap ratios
-            for p, logpost, loglike in self.sampler.sample(p0, samples=N):
-                assert np.all(logpost > -np.inf) and np.all(loglike > -np.inf), \
+            chain = self.sampler.chain(p0)
+            for ensemble in chain.iterate(N):
+                ratios = ensemble.swaps_accepted / ensemble.swaps_proposed
+
+                assert np.all(ensemble.logP > -np.inf) and np.all(ensemble.logP > -np.inf), \
                     'Invalid posterior/likelihood values; outside posterior support.'
-                # assert np.all(ratios >= 0) and np.all(ratios <= 1), \
-                    # 'Invalid swap ratios.'
-                assert logpost.shape == loglike.shape == p.shape[:-1], \
+                assert np.all(ratios >= 0) and np.all(ratios <= 1), \
+                    'Invalid swap ratios.'
+                assert ensemble.logP.shape == ensemble.logP.shape == ensemble.x.shape[:-1], \
                     'Sampler output shapes invalid.'
-                assert p.shape[-1] == self.ndim, \
+                assert ensemble.x.shape[-1] == self.ndim, \
                     'Sampler output shapes invalid.'
-                # assert ratios.shape[0] == logpost.shape[0] - 1 and len(ratios.shape) == 1, \
-                    # 'Sampler output shapes invalid.'
-                assert np.all(self.sampler.betas >= 0), \
+                assert ratios.shape[0] == ensemble.logP.shape[0] - 1 and len(ratios.shape) == 1, \
+                    'Sampler output shapes invalid.'
+                assert np.all(ensemble.betas >= 0), \
                     'Negative temperatures!'
-                assert np.all(np.diff(self.sampler.betas) != 0), \
+                assert np.all(np.diff(ensemble.betas) != 0), \
                     'Temperatures have coalesced.'
-                assert np.all(np.diff(self.sampler.betas) < 0), \
+                assert np.all(np.diff(ensemble.betas) < 0), \
                     'Temperatures incorrectly ordered.'
 
-        assert np.all(self.sampler.acor > 0), \
+        assert np.all(chain.get_acts() > 0), \
             'Invalid autocorrelation lengths.'
 
         if not weak:
             # Weaker assertions on acceptance fraction
-            assert np.mean(self.sampler.acceptance_fraction) > 0.1, \
+            assert np.mean(chain.jump_acceptance_ratio) > 0.1, \
                 'Acceptance fraction < 0.1'
-            assert np.mean(self.sampler.tswap_acceptance_fraction) > 0.1, \
+            assert np.mean(chain.swap_acceptance_ratio) > 0.1, \
                 'Temperature swap acceptance fraction < 0.1.'
-            # TODO
-            # assert abs(self.sampler.tswap_acceptance_fraction[0] - 0.25) < 0.05, \
-                # 'tswap acceptance fraction != 0.25'
 
-            chain = np.reshape(self.sampler.chain[0, ...],
-                               (-1, self.sampler.chain.shape[-1]))
+            # TODO: Why doesn't this work?
+            # if self.sampler.adaptive:
+            #     assert abs(chain.swap_acceptance_ratio[0] - 0.25) < 0.05, \
+            #         'Swap acceptance ratio != 0.25'
+
+            data = np.reshape(chain._x[0, ...], (-1, chain._x.shape[-1]))
 
             log_volume = self.ndim * np.log(cutoff) \
                 + log_unit_sphere_volume(self.ndim) \
@@ -212,15 +217,15 @@ class Tests(object):
             gaussian_integral = self.ndim / 2 * np.log(2 * np.pi) \
                 + 0.5 * np.log(np.linalg.det(self.cov))
 
-            logZ, dlogZ = self.sampler.log_evidence_estimate()
+            logZ, dlogZ = chain.log_evidence_estimate()
 
             assert np.abs(logZ - (gaussian_integral - log_volume)) < 3 * dlogZ, \
                 'Evidence incorrect: {:g}+/{:g} versus correct {:g}.' \
                 .format(logZ, gaussian_integral - log_volume, dlogZ)
             maxdiff = 10 ** logprecision
-            assert np.all((np.mean(chain, axis=0) - self.mean) ** 2 / N ** 2
+            assert np.all((np.mean(data, axis=0) - self.mean) ** 2 / N ** 2
                           < maxdiff), 'Mean incorrect.'
-            assert np.all((np.cov(chain, rowvar=0) - self.cov) ** 2 / N ** 2
+            assert np.all((np.cov(data, rowvar=False) - self.cov) ** 2 / N ** 2
                           < maxdiff), 'Covariance incorrect.'
 
     def test_prior_support(self):
@@ -257,7 +262,7 @@ class Tests(object):
         self.check_sampler(p0=self.p0_unit, fail=ValueError)
 
     def test_inf_logprob(self):
-        '''
+        """
         If a walker has any parameter negative, ``logprobfn`` returns
         ``-np.inf``.  Start the ensembles in the all-positive part of the
         parameter space, then run for long enough for sampler to migrate into
@@ -266,7 +271,7 @@ class Tests(object):
         a FloatingPointError will be thrown by Numpy.  Don't bother checking
         the results because this posterior is difficult to sample.
 
-        '''
+        """
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov_unit, test_inf=True),
                                LogPriorGaussian(self.icov_unit, cutoff=self.cutoff),
@@ -299,7 +304,7 @@ class Tests(object):
                                LogLikeGaussian(self.icov),
                                LogPriorGaussian(self.icov, cutoff=self.cutoff),
                                betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax),
-                               threads=2)
+                               mapper=Pool(2).map)
         self.check_sampler()
 
     def test_temp_inf(self):
@@ -313,31 +318,33 @@ class Tests(object):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov),
                                LogPriorGaussian(self.icov, cutoff=self.cutoff),
+                               adaptive=True,
                                betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
-        self.check_sampler(adapt=True)
+        self.check_sampler()
 
     def test_run_mcmc(self):
-        '''
+        """
         Check that :meth:`~.Sampler.run_mcmc()` is equivalent to
         :meth:`~.Sampler.sample()`.
 
-        '''
+        """
 
         N = 10
         self.sampler = s = Sampler(self.nwalkers, self.ndim,
                                    LogLikeGaussian(self.icov),
                                    LogPriorGaussian(self.icov, cutoff=self.cutoff),
+                                   adaptive=True,
                                    betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
 
         state = s.random.get_state()
         betas = s.betas.copy()
-        s.run_mcmc(self.p0, iterations=N, adapt=True)
+        s.run_mcmc(self.p0, iterations=N)
 
         chain0 = s.chain.copy()
         betas0 = s.betas.copy()
         s.reset(betas=betas)
         s.random.set_state(state)
-        for x in s.run_mcmc(self.p0, iterations=N, adapt=True):
+        for x in s.run_mcmc(self.p0, iterations=N):
             pass
         assert np.all(s.chain == chain0), \
             'Chains don\'t match!'
@@ -349,6 +356,7 @@ class Tests(object):
         self.sampler = s = Sampler(self.nwalkers, self.ndim,
                                    LogLikeGaussian(self.icov),
                                    LogPriorGaussian(self.icov, cutoff=self.cutoff),
+                                   adaptive=True,
                                    betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
 
         state = s.random.get_state()

@@ -9,15 +9,14 @@ import attr
 import itertools
 import numpy as np
 
-from attr.validators import instance_of, optional
 from numpy.random.mtrand import RandomState
 
-from . import util, chain
+from . import util, chain, ensemble
 
 
 def make_ladder(ndim, ntemps=None, Tmax=None):
-    '''
-    Returns a ladder of :math:`\beta \equiv 1/T` under a geometric spacing that is determined by the
+    """
+    Returns a ladder of :math:`\\beta \\equiv 1/T` under a geometric spacing that is determined by the
     arguments ``ntemps`` and ``Tmax``.  The temperature selection algorithm works as follows:
 
     Ideally, ``Tmax`` should be specified such that the tempered posterior looks like the prior at
@@ -50,7 +49,7 @@ def make_ladder(ndim, ntemps=None, Tmax=None):
       * If ``Tmax = inf``, place one chain at ``inf`` and ``ntemps-1`` in a 25% geometric spacing.
       * Else, use the unique geometric spacing defined by ``ntemps`` and ``Tmax``.
 
-    '''
+    """
 
     if type(ndim) != int or ndim < 1:
         raise ValueError('Invalid number of dimensions specified.')
@@ -119,10 +118,10 @@ def make_ladder(ndim, ntemps=None, Tmax=None):
 
 @attr.s(slots=True, frozen=True)
 class LikePriorEvaluator(object):
-    '''
+    """
     Wrapper class for logl and logp.
 
-    '''
+    """
 
     logl = attr.ib()
     logp = attr.ib()
@@ -168,7 +167,7 @@ class Sampler(object):
     adaptation_time = attr.ib(converter=int, default=100)
     scale_factor = attr.ib(converter=float, default=2)
 
-    _map = attr.ib(default=map)
+    _mapper = attr.ib(default=map)
     _evaluator = attr.ib(type=LikePriorEvaluator, init=False, default=None)
     _data = attr.ib(type=np.ndarray, init=False, default=None)
 
@@ -215,31 +214,49 @@ class Sampler(object):
                                               logl_kwargs=self.logl_kwargs,
                                               logp_kwargs=self.logp_kwargs))
 
-    def sample(self, x, random=None, thin_by=None):
-        '''
-        Return a new sampling chain.
-
-        '''
-
+    def ensemble(self, x, random=None):
         if random is None:
             random = RandomState()
         elif not isinstance(random, RandomState):
             raise TypeError('Invalid random state.')
 
+        config = ensemble.EnsembleConfiguration(adaptation_lag=self.adaptation_lag,
+                                                adaptation_time=self.adaptation_time,
+                                                scale_factor=self.scale_factor,
+                                                evaluator=self._evaluator)
+        return ensemble.Ensemble(x=x,
+                                 betas=self.betas,
+                                 config=config,
+                                 adaptive=self.adaptive,
+                                 random=random,
+                                 mapper=self._mapper)
+
+    def sample(self, x, random=None, thin_by=None):
+        """
+        Return a stateless iterator.
+
+        :param x: The starting position.
+        :param random: A numpy RandomState with which to sample.
+        :param thin_by: Only yield at multiples of this number.
+        :return: An iterator.
+        """
+
         if thin_by is None:
             thin_by = 1
 
-        config = chain.ChainConfiguration(adaptation_lag=self.adaptation_lag,
-                                          adaptation_time=self.adaptation_time,
-                                          scale_factor=self.scale_factor,
-                                          evaluator=self._evaluator)
-        return chain.EnsembleIterator(x=x,
-                                      betas=self.betas,
-                                      config=config,
-                                      thin_by=thin_by,
-                                      adaptive=self.adaptive,
-                                      random=random,
-                                      mapper=self._map)
+        ensemble = self.ensemble(x, random)
+        for t in itertools.count():
+            if t % thin_by == 0:
+                yield ensemble
+            ensemble.step()
 
     def chain(self, x, random=None, thin_by=None):
-        return chain.Chain(self.sample(x, random, thin_by))
+        """
+        Create a stateful chain that stores its
+
+        :param x:
+        :param random:
+        :param thin_by:
+        :return:
+        """
+        return chain.Chain(self.ensemble(x, random), thin_by)
