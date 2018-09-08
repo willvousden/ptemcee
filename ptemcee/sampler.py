@@ -152,7 +152,6 @@ class Sampler(object):
     # Mandatory parameters.
     nwalkers = attr.ib(converter=int)
     ndim = attr.ib(converter=int)
-    betas = attr.ib(converter=util._ladder)
 
     logl = attr.ib()
     logp = attr.ib()
@@ -160,6 +159,8 @@ class Sampler(object):
     logp_args = attr.ib(converter=list, factory=list)
     logl_kwargs = attr.ib(converter=dict, factory=dict)
     logp_kwargs = attr.ib(converter=dict, factory=dict)
+
+    betas = attr.ib(default=None)
 
     # Tuning parameters.
     adaptive = attr.ib(converter=bool, default=False)
@@ -196,6 +197,15 @@ class Sampler(object):
             raise TypeError('{} must be callable'.format(attribute.name))
 
     def __attrs_post_init__(self):
+        if self.betas is None:
+            betas = make_ladder(self.ndim)
+        elif isinstance(self.betas, int):
+            # Treat this as the number of temperatures to use.
+            betas = make_ladder(self.ndim, self.betas)
+        else:
+            betas = util._ladder(self.betas)
+
+        object.__setattr__(self, 'betas', betas)
         object.__setattr__(self, '_evaluator',
                            LikePriorEvaluator(logl=self.logl,
                                               logp=self.logp,
@@ -204,7 +214,7 @@ class Sampler(object):
                                               logl_kwargs=self.logl_kwargs,
                                               logp_kwargs=self.logp_kwargs))
 
-    def sample(self, x, random=None, thin_by=None):
+    def sample(self, x, random=None, thin_by=None, samples=None):
         '''
         Return a new sampling chain.
 
@@ -222,8 +232,11 @@ class Sampler(object):
                                           adaptation_time=self.adaptation_time,
                                           scale_factor=self.scale_factor,
                                           evaluator=self._evaluator)
-        return chain.Chain(config=config,
+        return chain.Chain(x=x,
+                           betas=self.betas,
+                           config=config,
                            thin_by=thin_by,
                            adaptive=self.adaptive,
                            random=random,
+                           max_samples=samples,
                            mapper=self._map)

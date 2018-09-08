@@ -3,7 +3,7 @@
 
 from __future__ import division, print_function, absolute_import, unicode_literals
 
-__all__ = ['_ladder', 'autocorr_function', 'autocorr_integrated_time', 'thermodynamic_integration_log_evidence']
+__all__ = ['_ladder', 'acf', 'integrated_act', 'thermodynamic_integration_log_evidence']
 
 import numpy as np
 
@@ -19,7 +19,7 @@ def _ladder(betas):
     return betas
 
 
-def autocorr_function(x, axis=0, fast=False):
+def acf(x, axis=0, fast=False):
     '''
     Estimate the autocorrelation function of a time series using the FFT.
 
@@ -55,7 +55,7 @@ def autocorr_function(x, axis=0, fast=False):
     m[axis] = 0
     return acf / acf[m]
 
-def autocorr_integrated_time(x, axis=0, window=50, fast=False):
+def integrated_act(x, axis=0, window=50, fast=False):
     '''
     Estimate the integrated autocorrelation time of a time series.
 
@@ -79,7 +79,7 @@ def autocorr_integrated_time(x, axis=0, window=50, fast=False):
 
     '''
     # Compute the autocorrelation function.
-    f = autocorr_function(x, axis=axis, fast=fast)
+    f = acf(x, axis=axis, fast=fast)
 
     # Special case 1D for simplicity.
     if len(f.shape) == 1:

@@ -8,7 +8,7 @@ Defines various pytest unit tests.
 from __future__ import absolute_import, print_function, division
 
 import numpy as np
-from .sampler import Sampler
+from .sampler import Sampler, make_ladder
 
 logprecision = -4
 
@@ -126,8 +126,7 @@ class Tests(object):
         cls.p0_unit = cls.p0_unit.reshape(cls.ntemps, cls.nwalkers, cls.ndim)
         cls.p0 = cls.p0.reshape(cls.ntemps, cls.nwalkers, cls.ndim)
 
-    def check_sampler(self, cutoff=None, N=None, p0=None, adapt=False,
-                      weak=False, fail=False):
+    def check_sampler(self, cutoff=None, N=None, p0=None, weak=False, fail=False):
         '''
         Check that the sampler is behaving itself.
 
@@ -141,8 +140,6 @@ class Tests(object):
             checking its output.
         p0 : float, optional
             The initial positions at which to start the sampler's walkers.
-        adapt : bool, optional
-            If ``True``, enable adaptive parallel tempering.
         weak : bool, optional
             If ``True``, just check that the sampler ran without errors; don't
             check any of the results.
@@ -162,26 +159,30 @@ class Tests(object):
         if fail:
             # Require the sampler to fail before it even starts.
             try:
-                for x in self.sampler.sample(p0, iterations=N, adapt=adapt):
+                for x in self.sampler.sample(p0, samples=N):
                     assert False, \
                         'Sampler should have failed by now.'
             except Exception as e:
                 # If a type was specified, require that the sampler fail with this exception type.
-                assert type(fail) is not type or type(e) is fail, \
-                    'Sampler failed with unexpected exception type.'
-                return
+                # assert type(fail) is not type or type(e) is fail, \
+                    # 'Sampler failed with unexpected exception type: {}.'.format(e)
+                if type(e) is fail:
+                    return
+                else:
+                    raise
         else:
-            for p, logpost, loglike, ratios in self.sampler.sample(p0, iterations=N, adapt=adapt, swap_ratios=True):
+            # TODO Check swap ratios
+            for p, logpost, loglike in self.sampler.sample(p0, samples=N):
                 assert np.all(logpost > -np.inf) and np.all(loglike > -np.inf), \
                     'Invalid posterior/likelihood values; outside posterior support.'
-                assert np.all(ratios >= 0) and np.all(ratios <= 1), \
-                    'Invalid swap ratios.'
+                # assert np.all(ratios >= 0) and np.all(ratios <= 1), \
+                    # 'Invalid swap ratios.'
                 assert logpost.shape == loglike.shape == p.shape[:-1], \
                     'Sampler output shapes invalid.'
                 assert p.shape[-1] == self.ndim, \
                     'Sampler output shapes invalid.'
-                assert ratios.shape[0] == logpost.shape[0] - 1 and len(ratios.shape) == 1, \
-                    'Sampler output shapes invalid.'
+                # assert ratios.shape[0] == logpost.shape[0] - 1 and len(ratios.shape) == 1, \
+                    # 'Sampler output shapes invalid.'
                 assert np.all(self.sampler.betas >= 0), \
                     'Negative temperatures!'
                 assert np.all(np.diff(self.sampler.betas) != 0), \
@@ -226,7 +227,7 @@ class Tests(object):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov_unit),
                                LogPriorGaussian(self.icov_unit, cutoff=self.cutoff),
-                               ntemps=self.ntemps, Tmax=self.Tmax)
+                               betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
 
         # What happens when we start the sampler outside our prior support?
         self.p0_unit[0][0][0] = 1e6 * self.cutoff
@@ -236,7 +237,7 @@ class Tests(object):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov_unit, test_inf=True),
                                LogPriorGaussian(self.icov_unit, cutoff=self.cutoff),
-                               ntemps=self.ntemps, Tmax=self.Tmax)
+                               betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
 
         # What happens when we start the sampler outside our likelihood
         # support?  Give some walkers a negative parameter value, where the
@@ -248,7 +249,7 @@ class Tests(object):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov_unit, test_nan=True),
                                LogPriorGaussian(self.icov_unit, cutoff=self.cutoff),
-                               ntemps=self.ntemps, Tmax=self.Tmax)
+                               betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
 
         # If a walker is right at zero, ``logprobfn`` returns ``np.nan``;
         # sampler should fail with a ``ValueError``.
@@ -269,7 +270,7 @@ class Tests(object):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov_unit, test_inf=True),
                                LogPriorGaussian(self.icov_unit, cutoff=self.cutoff),
-                               ntemps=self.ntemps, Tmax=np.inf)
+                               betas=make_ladder(self.ndim, self.ntemps, np.inf))
 
         self.check_sampler(p0=np.abs(self.p0_unit), weak=True)
 
@@ -277,7 +278,7 @@ class Tests(object):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov_unit),
                                LogPriorGaussian(self.icov_unit, cutoff=self.cutoff),
-                               ntemps=self.ntemps, Tmax=self.Tmax)
+                               betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
 
         # Set one of the walkers to have a ``np.nan`` value.  Choose the
         # maximum temperature as we're most likely to get away with this if
@@ -297,7 +298,7 @@ class Tests(object):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov),
                                LogPriorGaussian(self.icov, cutoff=self.cutoff),
-                               ntemps=self.ntemps, Tmax=self.Tmax,
+                               betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax),
                                threads=2)
         self.check_sampler()
 
@@ -305,14 +306,14 @@ class Tests(object):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov),
                                LogPriorGaussian(self.icov, cutoff=self.cutoff),
-                               ntemps=self.ntemps, Tmax=np.inf)
+                               betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
         self.check_sampler()
 
     def test_gaussian_adapt(self):
         self.sampler = Sampler(self.nwalkers, self.ndim,
                                LogLikeGaussian(self.icov),
                                LogPriorGaussian(self.icov, cutoff=self.cutoff),
-                               ntemps=self.ntemps, Tmax=self.Tmax)
+                               betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
         self.check_sampler(adapt=True)
 
     def test_run_mcmc(self):
@@ -326,7 +327,7 @@ class Tests(object):
         self.sampler = s = Sampler(self.nwalkers, self.ndim,
                                    LogLikeGaussian(self.icov),
                                    LogPriorGaussian(self.icov, cutoff=self.cutoff),
-                                   ntemps=self.ntemps, Tmax=self.Tmax)
+                                   betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
 
         state = s.random.get_state()
         betas = s.betas.copy()
@@ -348,7 +349,7 @@ class Tests(object):
         self.sampler = s = Sampler(self.nwalkers, self.ndim,
                                    LogLikeGaussian(self.icov),
                                    LogPriorGaussian(self.icov, cutoff=self.cutoff),
-                                   ntemps=self.ntemps, Tmax=self.Tmax)
+                                   betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
 
         state = s.random.get_state()
         betas = s.betas.copy()

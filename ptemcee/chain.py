@@ -37,14 +37,19 @@ class Chain(object):
     adaptive = attr.ib(converter=bool, default=False)
 
     _random = attr.ib(validator=instance_of(RandomState), factory=RandomState)
-    _map = attr.ib(default=map)
+    _mapper = attr.ib(default=map)
+
+    _max_samples = attr.ib(default=None)
+    _samples = attr.ib(init=False, default=0)
 
     time = attr.ib(init=False, default=0)
     nwalkers = attr.ib(init=False)
     ntemps = attr.ib(init=False)
     ndim = attr.ib(init=False)
 
-    @map.validator
+    _chain = attr.ib(init=False)
+
+    @_mapper.validator
     def _is_callable(self, attribute, value):
         if not callable(value):
             raise ValueError('{} must be callable.'.format(attribute.name))
@@ -72,16 +77,19 @@ class Chain(object):
         if (self.logP == -np.inf).any():
             raise ValueError('Attempting to start with samples outside posterior support.')
 
+        chain_length = self._max_samples or 0
+        self._chain = np.ndarray((chain_length, self.ntemps, self.nwalkers, self.ndim))
+
     def __iter__(self):
         return self
 
     def __next__(self):
+        if self._samples >= self._max_samples:
+            raise StopIteration()
+
         for i in range(self.thin_by):
             self._stretch(self.x, self.logP, self.logl)
-            self.x, ratios = self._temperature_swaps(self.betas,
-                                                     self.x,
-                                                     self.logP,
-                                                     self.logl)
+            self.x, ratios = self._temperature_swaps(self.x, self.logP, self.logl)
 
             # TODO: Should the notion of a 'complete' iteration really include the temperature adjustment?
             if self.adaptive and self.ntemps > 1:
@@ -93,7 +101,9 @@ class Chain(object):
 
             self.time += 1
 
-        yield self.x, self.logP, self.logl
+        self._samples += 1
+        self._chain[self._samples] = self.x
+        return self.x, self.logP, self.logl
 
     def _stretch(self, x, logP, logl):
         '''
@@ -159,12 +169,14 @@ class Chain(object):
         # return tuple(np.fromiter(results, float, len(values)).T)
 
         # Make a flattened iterable of the results, of alternating logL and logp.
+        shape = x.shape[:-1]
         values = x.reshape((-1, self.ndim))
         length = len(values)
-        results = itertools.chain.from_iterable(self._map(self._config.evaluator, values))
+        results = itertools.chain.from_iterable(self._mapper(self._config.evaluator, values))
 
         # Construct into a pre-allocated ndarray.
-        return tuple(np.fromiter(results, float, 2 * length).reshape((-1, 2)).T)
+        array = np.fromiter(results, float, 2 * length).reshape(shape + (2,))
+        return tuple(np.rollaxis(array, -1))
 
     def _tempered_likelihood(self, logl, betas=None):
         '''
@@ -260,3 +272,11 @@ class Chain(object):
             logP[i - 1, i1perm[sel]] = logP_temp + dbeta * logl_temp
 
         return x, ratios
+
+    def get_act(self, window=50):
+        acors = np.zeros((self.ntemps, self.ndim))
+
+        for i in range(self.ntemps):
+            x = np.mean(self._chain[i, :, :, :], axis=0)
+            acors[i, :] = util.integrated_act(x, window=window)
+        return acors
