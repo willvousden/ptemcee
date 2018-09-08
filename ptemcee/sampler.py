@@ -1,22 +1,22 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 from __future__ import (division, print_function, absolute_import,
                         unicode_literals)
 
-__all__ = ['Sampler', 'default_beta_ladder']
+__all__ = ['make_ladder', 'Sampler']
 
 import numpy as np
-import multiprocessing as multi
+import multiprocessing
 import attr
 
 from attr import Factory
 from attr.validators import instance_of, optional
+from np.random.mtrand import RandomState
 
 from . import util
 
 
-def default_beta_ladder(ndim, ntemps=None, Tmax=None):
+def make_ladder(ndim, ntemps=None, Tmax=None):
     '''
     Returns a ladder of :math:`\beta \equiv 1/T` under a geometric spacing that is determined by the
     arguments ``ntemps`` and ``Tmax``.  The temperature selection algorithm works as follows:
@@ -127,13 +127,13 @@ class LikePriorEvaluator(object):
 
     logl = attr.ib()
     logp = attr.ib()
-    loglargs = attr.ib(default=Factory(list))
-    logpargs = attr.ib(default=Factory(list))
-    loglkwargs = attr.ib(default=Factory(dict))
-    logpkwargs = attr.ib(default=Factory(dict))
+    logl_args = attr.ib(default=Factory(list))
+    logp_args = attr.ib(default=Factory(list))
+    logl_kwargs = attr.ib(default=Factory(dict))
+    logp_kwargs = attr.ib(default=Factory(dict))
 
     def __call__(self, x):
-        lp = self.logp(x, *self.logpargs, **self.logpkwargs)
+        lp = self.logp(x, *self.logp_args, **self.logp_kwargs)
         if np.isnan(lp):
             raise ValueError('Prior function returned NaN.')
 
@@ -141,15 +141,117 @@ class LikePriorEvaluator(object):
             # Can't return -inf, since this messes with beta=0 behaviour.
             ll = 0
         else:
-            ll = self.logl(x, *self.loglargs, **self.loglkwargs)
+            ll = self.logl(x, *self.logl_args, **self.logl_kwargs)
             if np.isnan(ll).any():
                 raise ValueError('Log likelihood function returned NaN.')
 
         return ll, lp
 
 
+def _ladder(betas):
+    '''
+    Convert an arbitrary iterable of floats into a sorted numpy array.
+
+    '''
+
+    betas = np.array(betas)
+    betas[::-1].sort()
+    return betas
+
+
+@attr.s(slots=True, frozen=True)
+class Configuration(object):
+    adaptation_lag = attr.ib()
+    adaptation_time = attr.ib()
+    scale_factor = attr.ib()
+    evaluator = attr.ib()
+
+
 @attr.s(slots=True)
 class Sampler(object):
+    # Mandatory parameters.
+    nwalkers = attr.ib(converter=int)
+    ndim = attr.ib(converter=int)
+    betas = attr.ib(converter=_ladder)
+
+    @nwalkers.validator
+    def _validate_nwalkers(self, attribute, value):
+        if value % 2 != 0:
+            raise ValueError('The number of walkers must be even.')
+        if value < 2 * self.ndim:
+            raise ValueError('The number of walkers must be greater than '
+                             '2 * dimension.')
+
+    @ndim.validator
+    def _validate_ndim(self, attribute, value):
+        if value < 1:
+            raise ValueError('Number of dimensions must be positive.')
+
+    @betas.validator
+    def _validate_betas(self, attribute, value):
+        if len(betas) < 1:
+            raise ValueError('Need at least temperature!')
+        if (betas < 0).any():
+            raise ValueError('Temperatures must be non-negative.')
+
+    logl = attr.ib()
+    logp = attr.ib()
+    logl_args = attr.ib(converter=list, default=Factory(list))
+    logp_args = attr.ib(converter=list, default=Factory(list))
+    logl_kwargs = attr.ib(converter=dict, default=Factory(dict))
+    logp_kwargs = attr.ib(converter=dict, default=Factory(dict))
+
+    @logl.validator
+    @logp.validator
+    def _is_callable(self, attribute, value):
+        if not callable(value):
+            raise TypeError('{} must be callable'
+                            .format(attribute.name))
+
+    # Tuning parameters.
+    adaptation_lag = attr.ib(converter=int, default=10000)
+    adaptation_time = attr.ib(converter=int, default=100)
+    scale_factor = attr.ib(converter=float, default=2)
+
+    _map = attr.ib(default=map)
+    _evaluator = attr.ib(init=False, default=None)
+
+    def __attrs_post_init__(self):
+        self._evaluator = LikePriorEvaluator(logl=self.logl,
+                                             logp=self.logp,
+                                             logl_args=self.logl_args,
+                                             logp_args=self.logp_args,
+                                             logl_kwargs=self.logl_kwargs,
+                                             logp_kwargs=self.logp_kwargs)
+
+    def __iter__(self):
+        return self.sample()
+
+    def sample(self, random=None, thin_by=None):
+        '''
+        Return a new sampling chain.
+
+        '''
+        if random is None:
+            random = RandomState()
+        elif not isinstance(random, RandomState):
+            raise TypeError('Invalid random state.')
+
+        if thin_by is None:
+            thin_by = 1
+
+        config = Config(adaptation_lag=self.adaptation_lag,
+                        adaptation_time=self.adaptation_time,
+                        scale_factor=self.scale_factor,
+                        evaluator=self._evaluator)
+        return Chain(config=config,
+                     thin_by=thin_by,
+                     random=random,
+                     mapper=self._map)
+
+
+@attr.s(slots=True, frozen=True)
+class PTSampler(object):
     '''
     A parallel-tempered ensemble sampler, using :class:`EnsembleSampler`
     for sampling within each parallel chain.
@@ -157,18 +259,13 @@ class Sampler(object):
     :param nwalkers:
         The number of ensemble walkers at each temperature.
 
-    :param dim:
+    :param ndim:
         The dimension of the parameter space.
 
-    :param betas: (optional)
-        Array giving the inverse temperatures, :math:`\\beta=1/T`, used in the ladder.  The default
-        is chosen according to :function:`default_beta_ladder` using ``ntemps`` and ``Tmax``.
-
-    :param ntemps: (optional)
-        If set, the number of temperatures to use.
-
-    :param Tmax: (optional)
-        If set, the maximum temperature for the ladder.
+    :param betas:
+        Array giving the inverse temperatures, :math:`\\beta=1/T`, used in the
+        ladder.  You can use :func:`make_ladder` to construct a reasonable default
+        according to your search space.
 
     :param logl:
         The log-likelihood function.
@@ -182,7 +279,7 @@ class Sampler(object):
     :param pool: (optional)
         Alternative to ``threads``.  Any object that implements a
         ``map`` method compatible with the built-in ``map`` will do
-        here.  For example, :class:`multi.Pool` will do.
+        here.  For example, :class:`multiprocessing.Pool` will do.
 
     :param scale_factor: (optional)
         Proposal scale factor.
@@ -207,54 +304,38 @@ class Sampler(object):
 
     '''
 
-    nwalkers = attr.ib(validator=instance_of(int))
-    dim = attr.ib(validator=instance_of(int))
-    logl = attr.ib(validator=instance_of(int))
-    logp = attr.ib(validator=instance_of(int))
-    ntemps = attr.ib(validator=optional(instance_of(int)), default=None)
-    Tmax = attr.ib(validator=optional(instance_of(float)), default=None)
-    _betas = attr.ib(default=None)
-    scale_factor = attr.ib(validator=optional(instance_of(float)), default=2)
-    loglargs = attr.ib(default=Factory(list))
-    logpargs = attr.ib(default=Factory(list))
-    loglkwargs = attr.ib(default=Factory(dict))
-    logpkwargs = attr.ib(default=Factory(dict))
-    adaptation_lag = attr.ib(default=10000)
-    adaptation_time = attr.ib(default=100)
-    _pool = attr.ib(default=None)
-    _threads = attr.ib(validator=optional(instance_of(int)), default=1)
-    _random = attr.ib(default=Factory(np.random.mtrand.RandomState))
-    _likeprior = attr.ib(init=False, default=None)
+    def foo():
+        nwalkers = attr.ib(validator=instance_of(int))
+        ndim = attr.ib(validator=instance_of(int))
+        logl = attr.ib(validator=instance_of(int))
+        logp = attr.ib(validator=instance_of(int))
+        ladder = attr.ib(converter=_ladder)
+        scale_factor = attr.ib(converter=float, validator=instance_of(float), default=2)
+        loglargs = attr.ib(default=Factory(list))
+        logpargs = attr.ib(default=Factory(list))
+        loglkwargs = attr.ib(default=Factory(dict))
+        logpkwargs = attr.ib(default=Factory(dict))
+        adaptation_lag = attr.ib(default=10000)
+        adaptation_time = attr.ib(default=100)
+        _pool = attr.ib(default=None)
+        _threads = attr.ib(validator=optional(instance_of(int)), default=1)
+        _random = attr.ib(default=Factory(np.random.mtrand.RandomState))
+        _likeprior = attr.ib(init=False, default=None)
 
-    _chain = attr.ib(init=False)
-    _logposterior = attr.ib(init=False)
-    _loglikelihood = attr.ib(init=False)
-    _beta_history = attr.ib(init=False)
+        _chain = attr.ib(init=False)
+        _logposterior = attr.ib(init=False)
+        _loglikelihood = attr.ib(init=False)
+        _beta_history = attr.ib(init=False)
 
-    _time = attr.ib(init=False)
-    _p0 = attr.ib(init=False)
-    _logposterior0 = attr.ib(init=False)
-    _loglikelihood0 = attr.ib(init=False)
+        _time = attr.ib(init=False)
+        _p0 = attr.ib(init=False)
+        _logposterior0 = attr.ib(init=False)
+        _loglikelihood0 = attr.ib(init=False)
 
-    nswap = attr.ib(init=False)
-    nswap_accepted = attr.ib(init=False)
-    nprop = attr.ib(init=False)
-    nprop_accepted = attr.ib(init=False)
-
-    @nwalkers.validator
-    def _validate_nwalkers(self, attribute, value):
-        if value % 2 != 0:
-            raise ValueError('The number of walkers must be even.')
-        if value < 2 * self.dim:
-            raise ValueError('The number of walkers must be greater than '
-                             '2 * dimension.')
-
-    @logl.validator
-    @logp.validator
-    def _is_callable(self, attribute, value):
-        if not callable(value):
-            raise TypeError('{} must be callable'
-                            .format(attribute.name))
+        nswap = attr.ib(init=False)
+        nswap_accepted = attr.ib(init=False)
+        nprop = attr.ib(init=False)
+        nprop_accepted = attr.ib(init=False)
 
     def __attrs_post_init__(self):
         self._likeprior = LikePriorEvaluator(logl, logp,
@@ -262,17 +343,11 @@ class Sampler(object):
                                              loglkwargs, logpkwargs)
 
         if self._threads > 1 and self._pool is None:
-            self._pool = multi._pool(self._threads)
+            self._pool = multiprocessing.Pool(self._threads)
 
-        # Set temperature ladder.  Append beta=0 to generated ladder.
-        betas = self._betas
-        if betas is None:
-            betas = default_beta_ladder(self.dim,
-                                        ntemps=self.ntemps,
-                                        Tmax=self.Tmax)
-        self.reset(betas=self._betas)
+        self.reset()
 
-    def reset(self, random=None, betas=None, time=None):
+    def reset(self, random=None, ladder=None, time=None):
         '''
         Clear the ``time``, ``chain``, ``logposterior``,
         ``loglikelihood``,  ``acceptance_fraction``,
@@ -291,11 +366,8 @@ class Sampler(object):
         self._p0 = None
         self._logposterior0 = None
         self._loglikelihood0 = None
-        if betas is not None:
-            self._betas = np.asarray(betas).copy()
-
-            # Make sure ladder is ascending in temperature.
-            self._betas[::-1].sort()
+        if ladder is not None:
+            self.ladder = _ladder(ladder)
 
         self.nswap = np.zeros(self.ntemps,
                               dtype=np.float)
@@ -330,7 +402,7 @@ class Sampler(object):
 
         :param p0:
             The initial positions of the walkers.  Shape should be
-            ``(ntemps, nwalkers, dim)``.  Can be omitted if resuming
+            ``(ntemps, nwalkers, ndim)``.  Can be omitted if resuming
             from a previous run.
 
         :param iterations: (optional)
@@ -446,7 +518,7 @@ class Sampler(object):
                                              size=(self.ntemps,
                                                    self.nwalkers//2)))
 
-            qs = np.zeros((self.ntemps, self.nwalkers//2, self.dim))
+            qs = np.zeros((self.ntemps, self.nwalkers//2, self.ndim))
             for k in range(self.ntemps):
                 js = self._random.randint(0, high=self.nwalkers // 2,
                                           size=self.nwalkers // 2)
@@ -457,7 +529,7 @@ class Sampler(object):
             qslogl, qslogp = self._evaluate(qs)
             qslogpost = self._tempered_likelihood(qslogl) + qslogp
 
-            logpaccept = self.dim*np.log(zs) + qslogpost \
+            logpaccept = self.ndim*np.log(zs) + qslogpost \
                 - logpost[:, jupdate::2]
             logr = np.log(self._random.uniform(low=0.0, high=1.0,
                                                size=(self.ntemps,
@@ -466,8 +538,8 @@ class Sampler(object):
             accepts = logr < logpaccept
             accepts = accepts.flatten()
 
-            pupdate.reshape((-1, self.dim))[accepts, :] = \
-                qs.reshape((-1, self.dim))[accepts, :]
+            pupdate.reshape((-1, self.ndim))[accepts, :] = \
+                qs.reshape((-1, self.ndim))[accepts, :]
             logpost[:, jupdate::2].reshape((-1,))[accepts] = \
                 qslogpost.reshape((-1,))[accepts]
             logl[:, jupdate::2].reshape((-1,))[accepts] = \
@@ -480,7 +552,7 @@ class Sampler(object):
 
     def _evaluate(self, ps):
         mapf = map if self._pool is None else self._pool.map
-        results = list(mapf(self._likeprior, ps.reshape((-1, self.dim))))
+        results = list(mapf(self._likeprior, ps.reshape((-1, self.ndim))))
 
         logl = np.fromiter((r[0] for r in results), np.float,
                            count=len(results)).reshape((self.ntemps, -1))
@@ -596,7 +668,7 @@ class Sampler(object):
         if self._chain is None:
             isave = 0
             self._chain = np.zeros((self.ntemps, self.nwalkers, nsave,
-                                    self.dim))
+                                    self.ndim))
             self._logposterior = np.zeros((self.ntemps, self.nwalkers, nsave))
             self._loglikelihood = np.zeros((self.ntemps, self.nwalkers,
                                             nsave))
@@ -606,7 +678,7 @@ class Sampler(object):
             self._chain = np.concatenate((self._chain,
                                           np.zeros((self.ntemps,
                                                     self.nwalkers,
-                                                    nsave, self.dim))),
+                                                    nsave, self.ndim))),
                                          axis=2)
             self._logposterior = np.concatenate((self._logposterior,
                                                  np.zeros((self.ntemps,
@@ -773,7 +845,7 @@ class Sampler(object):
             maximum number of lags to use. (default: 50)
 
         '''
-        acors = np.zeros((self.ntemps, self.dim))
+        acors = np.zeros((self.ntemps, self.ndim))
 
         for i in range(self.ntemps):
             x = np.mean(self._chain[i, :, :, :], axis=0)
