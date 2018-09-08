@@ -39,7 +39,7 @@ setup(
     long_description=read('README.rst'),
     package_data={'': ['LICENSE']},
     include_package_data=True,
-    install_requires=['numpy'],
+    install_requires=['numpy', 'attrs'],
     tests_require=['pytest', 'pytest-xdist'],
     classifiers=[
         'Development Status :: 5 - Production/Stable',

@@ -1,12 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from __future__ import (division, print_function, absolute_import,
-                        unicode_literals)
+from __future__ import division, print_function, absolute_import, unicode_literals
 
-__all__ = ['autocorr_function', 'autocorr_integrated_time', 'thermodynamic_integration_log_evidence']
+__all__ = ['_ladder', 'autocorr_function', 'autocorr_integrated_time', 'thermodynamic_integration_log_evidence']
 
 import numpy as np
+
+
+def _ladder(betas):
+    '''
+    Convert an arbitrary iterable of floats into a sorted numpy array.
+
+    '''
+
+    betas = np.array(betas)
+    betas[::-1].sort()
+    return betas
+
 
 def autocorr_function(x, axis=0, fast=False):
     '''

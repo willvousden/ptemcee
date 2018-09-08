@@ -1,25 +1,32 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-__all__ = ['Chain', 'ChainIterator']
+__all__ = ['Chain', 'ChainConfiguration']
 
-import numpy as np
-#  import multiprocessing
 import attr
+import itertools
+import numpy as np
 
-from attr import Factory
-from attr.validators import instance_of, optional
-from np.random.mtrand import RandomState
+from attr.validators import instance_of
+from numpy.random.mtrand import RandomState
 
 from . import util
-from .sampler import Sampler
+
+
+@attr.s(slots=True, frozen=True)
+class ChainConfiguration(object):
+    adaptation_lag = attr.ib()
+    adaptation_time = attr.ib()
+    scale_factor = attr.ib()
+    evaluator = attr.ib()
 
 
 @attr.s(slots=True)
-class ChainIterator(object):
-    _config = attr.ib(validator=instance_of(Configuration))
+class Chain(object):
+    _config = attr.ib(validator=instance_of(ChainConfiguration))
+
+    betas = attr.ib(converter=util._ladder)
 
     # Initial walker positions and probabilities.
     x = attr.ib(converter=np.array)
@@ -27,25 +34,31 @@ class ChainIterator(object):
     logl = attr.ib(default=None)
 
     thin_by = attr.ib(converter=int, default=1)
-    @thin_by.validator
-    def _is_positive(self, attribute, value):
-        if value < 1:
-            raise ValueError('{} must be positive.'.format(attribute.name))
+    adaptive = attr.ib(converter=bool, default=False)
 
-    betas = attr.ib(converter=_ladder)
+    _random = attr.ib(validator=instance_of(RandomState), factory=RandomState)
+    _map = attr.ib(default=map)
+
+    time = attr.ib(init=False, default=0)
+    nwalkers = attr.ib(init=False)
+    ntemps = attr.ib(init=False)
+    ndim = attr.ib(init=False)
+
+    @map.validator
+    def _is_callable(self, attribute, value):
+        if not callable(value):
+            raise ValueError('{} must be callable.'.format(attribute.name))
+
     @betas.validator
     def _is_consistent(self, attribute, value):
         if len(value) != len(self.x):
             raise ValueError('Number of temperatures not consistent with '
                              'starting positions.')
 
-    _random = attr.ib(validator=instance_of(RandomState), default=Factory(RandomState))
-    _map = attr.ib(validator=is_callable, default=map)
-
-    time = attr.ib(init=False, default=0)
-    nwalkers = attr.ib(init=False)
-    ntemps = attr.ib(init=False)
-    ndim = attr.ib(init=False)
+    @thin_by.validator
+    def _is_positive(self, attribute, value):
+        if value < 1:
+            raise ValueError('{} must be positive.'.format(attribute.name))
 
     def __attrs_post_init__(self):
         self.ntemps, self.nwalkers, self.ndim = self.x.shape
@@ -57,8 +70,7 @@ class ChainIterator(object):
             self.logl = logl
 
         if (self.logP == -np.inf).any():
-            raise ValueError('Attempting to start with samples outside '
-                             'posterior support.')
+            raise ValueError('Attempting to start with samples outside posterior support.')
 
     def __iter__(self):
         return self
@@ -71,9 +83,8 @@ class ChainIterator(object):
                                                      self.logP,
                                                      self.logl)
 
-            # TODO Should the notion of a 'complete' iteration really include
-            # the temperature adjustment?
-            if adapt and self.ntemps > 1:
+            # TODO: Should the notion of a 'complete' iteration really include the temperature adjustment?
+            if self.adaptive and self.ntemps > 1:
                 dbetas = self._get_ladder_adjustment(self.time,
                                                      self.betas,
                                                      ratios)
@@ -142,9 +153,18 @@ class ChainIterator(object):
 
         '''
 
-        results = list(self._map(self._config.evaluator,
-                                    x.reshape((-1, self.ndim))))
-        return tuple(np.array(results).T)
+        # We can have numpy pre-allocate the array
+        # values = x.reshape((-1, self.ndim))
+        # results = self._map(self._config.evaluator, values)
+        # return tuple(np.fromiter(results, float, len(values)).T)
+
+        # Make a flattened iterable of the results, of alternating logL and logp.
+        values = x.reshape((-1, self.ndim))
+        length = len(values)
+        results = itertools.chain.from_iterable(self._map(self._config.evaluator, values))
+
+        # Construct into a pre-allocated ndarray.
+        return tuple(np.fromiter(results, float, 2 * length).reshape((-1, 2)).T)
 
     def _tempered_likelihood(self, logl, betas=None):
         '''
