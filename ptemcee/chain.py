@@ -23,7 +23,13 @@ class ChainConfiguration(object):
 
 
 @attr.s(slots=True)
-class Chain(object):
+class EnsembleIterator(object):
+    """
+    This contains as little contextual information as it can.  It represents an ensemble that performs steps in the
+    parameter space.
+
+    """
+
     _config = attr.ib(validator=instance_of(ChainConfiguration))
 
     betas = attr.ib(converter=util._ladder)
@@ -39,15 +45,10 @@ class Chain(object):
     _random = attr.ib(validator=instance_of(RandomState), factory=RandomState)
     _mapper = attr.ib(default=map)
 
-    _max_samples = attr.ib(default=None)
-    _samples = attr.ib(init=False, default=0)
-
     time = attr.ib(init=False, default=0)
     nwalkers = attr.ib(init=False)
     ntemps = attr.ib(init=False)
     ndim = attr.ib(init=False)
-
-    _chain = attr.ib(init=False)
 
     @_mapper.validator
     def _is_callable(self, attribute, value):
@@ -77,16 +78,10 @@ class Chain(object):
         if (self.logP == -np.inf).any():
             raise ValueError('Attempting to start with samples outside posterior support.')
 
-        chain_length = self._max_samples or 0
-        self._chain = np.ndarray((chain_length, self.ntemps, self.nwalkers, self.ndim))
-
     def __iter__(self):
         return self
 
     def __next__(self):
-        if self._samples >= self._max_samples:
-            raise StopIteration()
-
         for i in range(self.thin_by):
             self._stretch(self.x, self.logP, self.logl)
             self.x, ratios = self._temperature_swaps(self.x, self.logP, self.logl)
@@ -101,15 +96,13 @@ class Chain(object):
 
             self.time += 1
 
-        self._samples += 1
-        self._chain[self._samples] = self.x
         return self.x, self.logP, self.logl
 
     def _stretch(self, x, logP, logl):
-        '''
+        """
         Perform the stretch-move proposal on each ensemble.
 
-        '''
+        """
 
         w = self.nwalkers // 2
         d = self.ndim
@@ -158,10 +151,10 @@ class Chain(object):
             # self.nprop_accepted[:, j_update::2] += accepts
 
     def _evaluate(self, x):
-        '''
+        """
         Evaluate the log likelihood and log prior functions at the specified walker positions.
 
-        '''
+        """
 
         # We can have numpy pre-allocate the array
         # values = x.reshape((-1, self.ndim))
@@ -179,7 +172,7 @@ class Chain(object):
         return tuple(np.rollaxis(array, -1))
 
     def _tempered_likelihood(self, logl, betas=None):
-        '''
+        """
         Compute tempered log likelihood.  This is usually a mundane
         multiplication, except for the special case where beta == 0 *and* we're
         outside the likelihood support.
@@ -188,7 +181,7 @@ class Chain(object):
         allow the likelihood to dominate the temperature, since wandering
         outside the likelihood support causes a discontinuity.
 
-        '''
+        """
 
         if betas is None:
             betas = self.betas
@@ -200,11 +193,11 @@ class Chain(object):
         return loglT
 
     def _get_ladder_adjustment(self, time, betas0, ratios):
-        '''
+        """
         Execute temperature adjustment according to dynamics outlined in
         `arXiv:1501.05823 <http://arxiv.org/abs/1501.05823>`_.
 
-        '''
+        """
 
         betas = betas0.copy()
 
@@ -224,11 +217,11 @@ class Chain(object):
         return betas - betas0
 
     def _temperature_swaps(self, x, logP, logl):
-        '''
+        """
         Perform parallel-tempering temperature swaps on the state
         in ``x`` with associated ``logP`` and ``logl``.
 
-        '''
+        """
 
         ntemps = len(self.betas)
         ratios = np.zeros(ntemps - 1)
@@ -273,10 +266,52 @@ class Chain(object):
 
         return x, ratios
 
-    def get_act(self, window=50):
-        acors = np.zeros((self.ntemps, self.ndim))
+
+@attr.s(slots=True)
+class Chain(object):
+    _ensemble_iterator = attr.ib(type=EnsembleIterator)
+    _data = attr.ib(type=np.ndarray, init=False, default=None)
+
+    def __attrs_post_init__(self):
+        self._data = np.empty(self._get_shape(0), float)
+
+    def _get_shape(self, length):
+        return (length,
+                self._ensemble_iterator.ntemps,
+                self._ensemble_iterator.nwalkers,
+                self._ensemble_iterator.ndim)
+
+    @property
+    def length(self):
+        return self._data.shape[0]
+
+    @property
+    def time(self):
+        return self._ensemble_iterator.time
+
+    @property
+    def ntemps(self):
+        return self._ensemble_iterator.ntemps
+
+    @property
+    def nwalkers(self):
+        return self._ensemble_iterator.nwalkers
+
+    @property
+    def ndim(self):
+        return self._ensemble_iterator.ndim
+
+    def run(self, count):
+        # TODO: This will break if there are references to _data elsewhere.
+        self._data.resize(self._get_shape(self.length + count))
+        for i, (x, logP, logl) in enumerate(itertools.islice(self._ensemble_iterator, count),
+                                            self.length):
+            self._data[i] = x
+
+    def get_acts(self, window=50):
+        acts = np.zeros((self.ntemps, self.ndim))
 
         for i in range(self.ntemps):
-            x = np.mean(self._chain[i, :, :, :], axis=0)
-            acors[i, :] = util.integrated_act(x, window=window)
-        return acors
+            x = np.mean(self._data[:, i, :, :], axis=0)
+            acts[i, :] = util.integrated_act(x, window=window)
+        return acts

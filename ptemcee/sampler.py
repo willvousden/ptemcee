@@ -5,9 +5,9 @@ from __future__ import (division, print_function, absolute_import,
 
 __all__ = ['make_ladder', 'Sampler']
 
-import numpy as np
-import multiprocessing
 import attr
+import itertools
+import numpy as np
 
 from attr.validators import instance_of, optional
 from numpy.random.mtrand import RandomState
@@ -169,7 +169,8 @@ class Sampler(object):
     scale_factor = attr.ib(converter=float, default=2)
 
     _map = attr.ib(default=map)
-    _evaluator = attr.ib(init=False, default=None)
+    _evaluator = attr.ib(type=LikePriorEvaluator, init=False, default=None)
+    _data = attr.ib(type=np.ndarray, init=False, default=None)
 
     @nwalkers.validator
     def _validate_nwalkers(self, attribute, value):
@@ -214,7 +215,7 @@ class Sampler(object):
                                               logl_kwargs=self.logl_kwargs,
                                               logp_kwargs=self.logp_kwargs))
 
-    def sample(self, x, random=None, thin_by=None, samples=None):
+    def sample(self, x, random=None, thin_by=None):
         '''
         Return a new sampling chain.
 
@@ -232,11 +233,13 @@ class Sampler(object):
                                           adaptation_time=self.adaptation_time,
                                           scale_factor=self.scale_factor,
                                           evaluator=self._evaluator)
-        return chain.Chain(x=x,
-                           betas=self.betas,
-                           config=config,
-                           thin_by=thin_by,
-                           adaptive=self.adaptive,
-                           random=random,
-                           max_samples=samples,
-                           mapper=self._map)
+        return chain.EnsembleIterator(x=x,
+                                      betas=self.betas,
+                                      config=config,
+                                      thin_by=thin_by,
+                                      adaptive=self.adaptive,
+                                      random=random,
+                                      mapper=self._map)
+
+    def chain(self, x, random=None, thin_by=None):
+        return chain.Chain(self.sample(x, random, thin_by))
