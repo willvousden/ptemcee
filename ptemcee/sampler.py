@@ -225,7 +225,7 @@ class Sampler(object):
                                                 scale_factor=self.scale_factor,
                                                 evaluator=self._evaluator)
         return ensemble.Ensemble(x=x,
-                                 betas=self.betas,
+                                 betas=self.betas.copy(),
                                  config=config,
                                  adaptive=self.adaptive,
                                  random=random,
@@ -235,28 +235,21 @@ class Sampler(object):
         """
         Return a stateless iterator.
 
-        :param x: The starting position.
-        :param random: A numpy RandomState with which to sample.
-        :param thin_by: Only yield at multiples of this number.
-        :return: An iterator.
         """
 
         if thin_by is None:
             thin_by = 1
 
+        # Don't yield the starting state.
         ensemble = self.ensemble(x, random)
-        for t in itertools.count():
-            if t % thin_by == 0:
-                yield ensemble
-            ensemble.step()
+        while True:
+            for _ in range(thin_by):
+                ensemble.step()
+            yield ensemble
 
     def chain(self, x, random=None, thin_by=None):
         """
-        Create a stateful chain that stores its
+        Create a stateful chain that stores its history.
 
-        :param x:
-        :param random:
-        :param thin_by:
-        :return:
         """
         return chain.Chain(self.ensemble(x, random), thin_by)

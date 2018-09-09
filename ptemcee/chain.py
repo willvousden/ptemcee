@@ -15,32 +15,32 @@ from . import ensemble
 class Chain(object):
     ensemble = attr.ib(type=ensemble.Ensemble)
     thin_by = attr.ib(type=int, default=None)
-    _x = attr.ib(type=np.ndarray, init=False, default=None)
-    _logP = attr.ib(type=np.ndarray, init=False, default=None)
-    _logl = attr.ib(type=np.ndarray, init=False, default=None)
-    _betas = attr.ib(type=np.ndarray, init=False, default=None)
+    x = attr.ib(type=np.ndarray, init=False, default=None)
+    logP = attr.ib(type=np.ndarray, init=False, default=None)
+    logl = attr.ib(type=np.ndarray, init=False, default=None)
+    betas = attr.ib(type=np.ndarray, init=False, default=None)
 
-    _swaps_proposed = attr.ib(type=np.ndarray, init=False)
-    _swaps_accepted = attr.ib(type=np.ndarray, init=False)
-    _jumps_proposed = attr.ib(type=np.ndarray, init=False)
-    _jumps_accepted = attr.ib(type=np.ndarray, init=False)
+    swaps_proposed = attr.ib(type=np.ndarray, init=False)
+    swaps_accepted = attr.ib(type=np.ndarray, init=False)
+    jumps_proposed = attr.ib(type=np.ndarray, init=False)
+    jumps_accepted = attr.ib(type=np.ndarray, init=False)
 
     def __attrs_post_init__(self):
         if self.thin_by is None:
             self.thin_by = 1
-        self._x = np.empty((0, self.ntemps, self.nwalkers, self.ndim), float)
-        self._logP = np.empty((0, self.ntemps, self.nwalkers), float)
-        self._logl = np.empty((0, self.ntemps, self.nwalkers), float)
-        self._betas = np.empty((0, self.ntemps), float)
+        self.x = np.empty((0, self.ntemps, self.nwalkers, self.ndim), float)
+        self.logP = np.empty((0, self.ntemps, self.nwalkers), float)
+        self.logl = np.empty((0, self.ntemps, self.nwalkers), float)
+        self.betas = np.empty((0, self.ntemps), float)
 
-        self._jumps_proposed = np.zeros((self.ntemps, self.nwalkers))
-        self._jumps_accepted = np.zeros((self.ntemps, self.nwalkers))
-        self._swaps_proposed = np.zeros(self.ntemps - 1)
-        self._swaps_accepted = np.zeros(self.ntemps - 1)
+        self.jumps_proposed = np.zeros((self.ntemps, self.nwalkers))
+        self.jumps_accepted = np.zeros((self.ntemps, self.nwalkers))
+        self.swaps_proposed = np.zeros(self.ntemps - 1)
+        self.swaps_accepted = np.zeros(self.ntemps - 1)
 
     @property
     def length(self):
-        return self._x.shape[0]
+        return self.x.shape[0]
 
     @property
     def time(self):
@@ -60,11 +60,11 @@ class Chain(object):
 
     @property
     def jump_acceptance_ratio(self):
-        return self._jumps_accepted / self._jumps_proposed
+        return self.jumps_accepted / self.jumps_proposed
 
     @property
     def swap_acceptance_ratio(self):
-        return self._swaps_accepted / self._swaps_proposed
+        return self.swaps_accepted / self.swaps_proposed
 
     @staticmethod
     def _resize(array, count):
@@ -72,34 +72,43 @@ class Chain(object):
         return np.concatenate((array, np.empty(shape)), axis=0)
 
     def run(self, count):
+        jp0 = self.jumps_proposed.copy()
+        ja0 = self.jumps_accepted.copy()
+        sp0 = self.swaps_proposed.copy()
+        sa0 = self.swaps_accepted.copy()
         for _ in self.iterate(count):
             pass
+        jp = self.jumps_proposed - jp0
+        ja = self.jumps_accepted - ja0
+        sp = self.swaps_proposed - sp0
+        sa = self.swaps_accepted - sa0
+        return ja / jp, sa / sp
 
     def iterate(self, count):
-        self._x = self._resize(self._x, count)
-        self._logP = self._resize(self._logP, count)
-        self._logl = self._resize(self._logl, count)
-        self._betas = self._resize(self._betas, count)
-        for i in range(count):
-            # TODO: off-by-one at start?
+        start = self.length
+        self.x = self._resize(self.x, count)
+        self.logP = self._resize(self.logP, count)
+        self.logl = self._resize(self.logl, count)
+        self.betas = self._resize(self.betas, count)
+        for i in range(start, start + count):
             for _ in range(self.thin_by):
                 self.ensemble.step()
+                self.swaps_proposed += self.ensemble.swaps_proposed
+                self.swaps_accepted += self.ensemble.swaps_accepted
+                self.jumps_proposed += self.ensemble.jumps_proposed
+                self.jumps_accepted += self.ensemble.jumps_accepted
 
-            self._x[i] = self.ensemble.x
-            self._logP[i] = self.ensemble.logP
-            self._logl[i] = self.ensemble.logl
-            self._betas[i] = self.ensemble.betas
-            self._swaps_proposed += self.ensemble.swaps_proposed
-            self._swaps_accepted += self.ensemble.swaps_accepted
-            self._jumps_proposed += self.ensemble.jumps_proposed
-            self._jumps_accepted += self.ensemble.jumps_accepted
+            self.x[i] = self.ensemble.x
+            self.logP[i] = self.ensemble.logP
+            self.logl[i] = self.ensemble.logl
+            self.betas[i] = self.ensemble.betas
             yield self.ensemble
 
     def get_acts(self, window=50):
         acts = np.zeros((self.ntemps, self.ndim))
 
         for i in range(self.ntemps):
-            x = np.mean(self._x[:, i, :, :], axis=1)
+            x = np.mean(self.x[:, i, :, :], axis=1)
             acts[i, :] = util.get_integrated_act(x, window=window)
         return acts
 
@@ -119,6 +128,6 @@ class Chain(object):
 
         """
 
-        istart = int(self._logl.shape[0] * fburnin + 0.5)
-        mean_logls = np.mean(np.mean(self._logl, axis=2)[istart:, :], axis=0)
-        return util.thermodynamic_integration_log_evidence(self._betas[-1], mean_logls)
+        istart = int(self.logl.shape[0] * fburnin + 0.5)
+        mean_logls = np.mean(np.mean(self.logl, axis=2)[istart:, :], axis=0)
+        return util.thermodynamic_integration_log_evidence(self.betas[-1], mean_logls)
