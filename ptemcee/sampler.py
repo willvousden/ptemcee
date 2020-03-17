@@ -188,7 +188,9 @@ class Sampler(object):
     def _validate_betas(self, attribute, value):
         try:
             # see if betas is an integer.
-            operator.index(value)
+            v = operator.index(value)
+            if v < 1:
+                raise ValueError("Need at least one temperature")
             return
         except TypeError:
             pass
