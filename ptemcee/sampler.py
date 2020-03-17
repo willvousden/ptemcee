@@ -5,6 +5,7 @@ from __future__ import (division, print_function, absolute_import,
 
 __all__ = ['make_ladder', 'Sampler']
 
+import operator
 import attr
 import itertools
 import numpy as np
@@ -185,6 +186,13 @@ class Sampler(object):
 
     @betas.validator
     def _validate_betas(self, attribute, value):
+        try:
+            # see if betas is an integer.
+            operator.index(value)
+            return
+        except TypeError:
+            pass
+
         if len(value) < 1:
             raise ValueError('Need at least one temperature!')
         if (value < 0).any():
