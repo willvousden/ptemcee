@@ -307,6 +307,13 @@ class Tests(object):
                           betas=make_ladder(self.ndim, self.ntemps, Tmax=self.Tmax))
         self.check_sampler(sampler, p0=self.p0)
 
+    def test_betas(self):
+        sampler = Sampler(self.nwalkers, self.ndim,
+                          LogLikeGaussian(self.icov),
+                          LogPriorGaussian(self.icov, cutoff=self.cutoff),
+                          betas=20)
+        assert sampler.betas.shape[0] == 20
+
     def test_gaussian_adapt(self):
         sampler = Sampler(self.nwalkers, self.ndim,
                           LogLikeGaussian(self.icov),
