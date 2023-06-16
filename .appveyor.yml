@@ -2,16 +2,12 @@ build: off
 
 environment:
     matrix:
-        - PYTHON_MAJOR: 2
-          PYTHON_MINOR: 7
-        - PYTHON_MAJOR: 3
-          PYTHON_MINOR: 4
-        - PYTHON_MAJOR: 3
-          PYTHON_MINOR: 5
         - PYTHON_MAJOR: 3
           PYTHON_MINOR: 6
         - PYTHON_MAJOR: 3
           PYTHON_MINOR: 7
+        - PYTHON_MAJOR: 3
+          PYTHON_MINOR: 8
 
 install:
     # Add Make and Python to the PATH.
