@@ -1,3 +1,5 @@
+from __future__ import division
+
 import attr
 import numpy as np
 import itertools
